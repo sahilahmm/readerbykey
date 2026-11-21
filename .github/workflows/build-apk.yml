@@ -1,0 +1,114 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write # needed to publish the GitHub Release
+
+concurrency:
+  group: build-apk
+  cancel-in-progress: true
+
+env:
+  APK_NAME: Reader-by-Key.apk
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Copy PDF.js into the app
+        run: npm run prepare:web
+
+      - name: Generate the Android project
+        run: npx cap add android
+
+      - name: Apply icon, splash and version number
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+          VERSION_NAME: 1.0.${{ github.run_number }}
+        run: |
+          node scripts/patch-android.mjs
+          npx cap sync android
+
+      - name: Build and sign the APK
+        working-directory: android
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          mkdir -p ../dist
+
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            # Your own permanent key: every build can update the previous install.
+            ./gradlew --no-daemon assembleRelease
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            BT="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+            "$BT/zipalign" -p -f 4 app/build/outputs/apk/release/app-release-unsigned.apk "$RUNNER_TEMP/aligned.apk"
+            "$BT/apksigner" sign \
+              --ks "$RUNNER_TEMP/release.jks" \
+              --ks-key-alias reader \
+              --ks-pass env:KEYSTORE_PASSWORD \
+              --key-pass env:KEYSTORE_PASSWORD \
+              --out "../dist/$APK_NAME" "$RUNNER_TEMP/aligned.apk"
+            "$BT/apksigner" verify --print-certs "../dist/$APK_NAME"
+            rm -f "$RUNNER_TEMP/release.jks"
+            echo "SIGNING=release" >> "$GITHUB_ENV"
+          else
+            # No key set up yet: build with a temporary debug key so it still works.
+            ./gradlew --no-daemon assembleDebug
+            cp app/build/outputs/apk/debug/app-debug.apk "../dist/$APK_NAME"
+            echo "SIGNING=debug" >> "$GITHUB_ENV"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Reader-by-Key-apk
+          path: dist/${{ env.APK_NAME }}
+          retention-days: 14
+
+      - name: Publish release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          if [ "$SIGNING" = "release" ]; then
+            NOTES="Download **$APK_NAME** below and open it on your Android phone. It installs as **Reader** and updates over the previous version."
+          else
+            NOTES="Download **$APK_NAME** below and open it on your Android phone. It installs as **Reader**. This build uses a temporary debug key, so uninstall the old version before installing a new one (see README: permanent signing)."
+          fi
+          gh release delete latest --cleanup-tag --yes || true
+          gh release create latest "dist/$APK_NAME" \
+            --title "Reader by Key 1.0.$RUN_NUMBER" \
+            --notes "$NOTES" \
+            --target "$GITHUB_SHA" \
+            --latest
