@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta name="color-scheme" content="light dark" />
+  <title>Reader</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- HOME -->
+  <main id="home" class="screen">
+    <header class="home-head">
+      <h1>Reader</h1>
+      <p>Open a PDF and pick up where you left off.</p>
+    </header>
+
+    <button id="openBtn" class="primary" type="button">Open a PDF</button>
+    <input id="fileInput" type="file" accept="application/pdf,.pdf" hidden />
+
+    <section id="recent" hidden>
+      <h2>Recent</h2>
+      <ul id="recentList"></ul>
+    </section>
+
+    <p id="empty" class="empty">Nothing here yet.</p>
+  </main>
+
+  <!-- READER -->
+  <section id="reader" class="screen" hidden>
+    <header id="bar" class="bar">
+      <button id="backBtn" class="icon" type="button" aria-label="Back">
+        <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <h2 id="title" class="bar-title"></h2>
+      <button id="nightBtn" class="icon" type="button" aria-label="Night pages" aria-pressed="false">
+        <svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>
+      </button>
+      <button id="zoomOut" class="icon" type="button" aria-label="Zoom out">
+        <svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg>
+      </button>
+      <button id="zoomIn" class="icon" type="button" aria-label="Zoom in">
+        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+    </header>
+
+    <div id="scroller" class="scroller">
+      <div id="pages" class="pages"></div>
+    </div>
+
+    <button id="pill" class="pill" type="button" aria-label="Go to page">1 / 1</button>
+  </section>
+
+  <!-- GO TO PAGE -->
+  <div id="sheet" class="sheet" hidden>
+    <form id="jumpForm" class="sheet-card" autocomplete="off">
+      <label for="jumpInput">Go to page</label>
+      <div class="sheet-row">
+        <input id="jumpInput" type="number" inputmode="numeric" min="1" required />
+        <button class="primary" type="submit">Go</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="loading" class="loading" hidden>Opening…</div>
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
