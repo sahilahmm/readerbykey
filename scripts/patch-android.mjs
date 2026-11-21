@@ -69,10 +69,14 @@ if (!manifest.includes("android:mimeType=\"application/pdf\"")) {
 `;
   if (!manifest.includes("</activity>")) throw new Error("Activity not found in AndroidManifest.xml");
   manifest = manifest.replace("</activity>", `${pdfFilter}\n        </activity>`);
+  // the on-screen keyboard resizes the page, so the pill rises above it while renaming
+  if (!manifest.includes("windowSoftInputMode")) {
+    manifest = manifest.replace('android:launchMode="singleTask"', 'android:launchMode="singleTask"\n            android:windowSoftInputMode="adjustResize"');
+  }
   writeFileSync(manifestPath, manifest);
 }
 
-// 6. version numbers
+// 6. version numbers (VERSION_NAME comes from the VERSION file, VERSION_CODE from the build number)
 const code = parseInt(process.env.VERSION_CODE || "1", 10);
 const name = process.env.VERSION_NAME || "1.0";
 let gradle = readFileSync(gradleFile, "utf8");

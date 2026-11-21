@@ -3,7 +3,7 @@ import * as pdfjsLib from "./lib/pdf.min.mjs";
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("./lib/pdf.worker.min.mjs", import.meta.url).href;
 
 /* ------------------------------------------------------------------ *
- *  Constants + element refs
+ *  Setup
  * ------------------------------------------------------------------ */
 
 const MAX_RECENT = 10;
@@ -11,39 +11,33 @@ const MIN_ZOOM = 0.6;
 const MAX_ZOOM = 4;
 const MAX_PIXELS = 14_000_000; // cap per-page canvas size to protect memory
 const PDF_OPTIONS = {
-  cMapUrl: new URL("./lib/cmaps/", import.meta.url).href,
-  cMapPacked: true,
   standardFontDataUrl: new URL("./lib/standard_fonts/", import.meta.url).href,
   iccUrl: new URL("./lib/iccs/", import.meta.url).href,
   wasmUrl: new URL("./lib/wasm/", import.meta.url).href,
 };
 
 const $ = (id) => document.getElementById(id);
-const els = {
-  home: $("home"),
-  reader: $("reader"),
-  openBtn: $("openBtn"),
-  fileInput: $("fileInput"),
-  recent: $("recent"),
-  recentList: $("recentList"),
-  empty: $("empty"),
-  bar: $("bar"),
-  title: $("title"),
-  backBtn: $("backBtn"),
-  nightBtn: $("nightBtn"),
-  zoomIn: $("zoomIn"),
-  zoomOut: $("zoomOut"),
-  scroller: $("scroller"),
-  pages: $("pages"),
-  pill: $("pill"),
-  sheet: $("sheet"),
-  jumpForm: $("jumpForm"),
-  jumpInput: $("jumpInput"),
-  loading: $("loading"),
-  toast: $("toast"),
-};
+const els = Object.fromEntries(
+  [
+    "home", "reader", "list", "empty", "greeting", "archiveChip", "dock", "fileInput",
+    "bOpen", "bAdd", "bRemove", "bShare", "bRename", "bArchive", "archiveLabel",
+    "bPdf", "bWord", "bYes", "bNo", "bBack", "renameInput", "dockMsg",
+    "bar", "title", "backBtn", "textBtn", "nightBtn", "zoomIn", "zoomOut",
+    "scroller", "pages", "textView", "pill", "sheet", "jumpForm", "jumpInput",
+    "loading", "toast",
+  ].map((id) => [id, $(id)])
+);
 
 const state = {
+  // home
+  all: [], // every saved file's meta
+  live: [], // not archived, newest first
+  view: "recent", // "recent" | "archive"
+  sel: null, // selected file id
+  mode: "open", // dock mode
+  pending: null, // what the confirm button will do
+  gcat: "", // greeting category
+  // reader
   pdf: null,
   id: null,
   meta: null,
@@ -56,9 +50,16 @@ const state = {
   raf: 0,
   current: 0,
   night: false,
+  text: false,
+  textPages: null,
+  tz: 1, // text size
+  scrollY: 0,
   chromeHidden: false,
   chromeShownAt: 0,
 };
+
+let exportMod = null;
+const loadExport = () => (exportMod ??= import("./export.js"));
 
 /* ------------------------------------------------------------------ *
  *  Storage (IndexedDB): small "meta" rows + the PDF blobs
@@ -108,38 +109,19 @@ const deleteBoth = (id) =>
     b.delete(id);
   });
 
+// keep the newest MAX_RECENT files; archived files are never trimmed
 async function trimRecent() {
-  const all = (await getAllMeta()).sort((a, b) => b.openedAt - a.openedAt);
-  for (const old of all.slice(MAX_RECENT)) await deleteBoth(old.id);
+  const live = (await getAllMeta()).filter((m) => !m.archived).sort((a, b) => b.openedAt - a.openedAt);
+  for (const old of live.slice(MAX_RECENT)) await deleteBoth(old.id);
 }
 
 /* ------------------------------------------------------------------ *
- *  Small helpers
+ *  Helpers
  * ------------------------------------------------------------------ */
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const stripExt = (name) => name.replace(/\.pdf$/i, "");
-
-let toastTimer = 0;
-function toast(msg) {
-  els.toast.textContent = msg;
-  els.toast.hidden = false;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => (els.toast.hidden = true), 2800);
-}
-
-function timeAgo(ts) {
-  const days = Math.floor((startOfDay(Date.now()) - startOfDay(ts)) / 86_400_000);
-  if (days <= 0) return "Today";
-  if (days === 1) return "Yesterday";
-  if (days < 7) return `${days} days ago`;
-  return new Date(ts).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
-}
-function startOfDay(ts) {
-  const d = new Date(ts);
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
-}
+const pick = (list) => list[Math.floor(Math.random() * list.length)];
 
 function store(key, value) {
   try {
@@ -150,75 +132,334 @@ function store(key, value) {
   }
 }
 
+let toastTimer = 0;
+function toast(msg) {
+  els.toast.textContent = msg;
+  els.toast.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (els.toast.hidden = true), 2800);
+}
+
+function busy(text) {
+  els.loading.textContent = text;
+  els.loading.hidden = false;
+}
+
+function timeAgo(ts) {
+  const day = (t) => new Date(t).setHours(0, 0, 0, 0);
+  const days = Math.round((day(Date.now()) - day(ts)) / 86_400_000);
+  if (days <= 0) return "Today";
+  if (days === 1) return "Yesterday";
+  if (days < 7) return `${days} days ago`;
+  return new Date(ts).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+}
+
 /* ------------------------------------------------------------------ *
- *  Home screen
+ *  The pill: one shape that morphs between what you can do right now
  * ------------------------------------------------------------------ */
 
-const X_ICON = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+const seg = {};
+els.dock.querySelectorAll(".seg").forEach((e) => (seg[e.dataset.s] = e));
 
-async function renderRecent() {
-  let items = [];
+const MODES = {
+  open: ["open"], //                    nothing saved yet
+  home: ["add", "remove"], //           something is in Recent
+  select: ["share", "rename", "archive"], // a file is selected
+  share: ["pdf", "word", "no"],
+  rename: ["input", "yes"],
+  confirm: ["msg", "yes", "no"],
+  msg: ["msg"], //                      a short status, then back to normal
+  archive: ["back"],
+};
+
+let flashTimer = 0;
+
+function setMode(name) {
+  clearTimeout(flashTimer);
+  state.mode = name;
+  const on = MODES[name];
+  for (const [key, el] of Object.entries(seg)) el.classList.toggle("on", on.includes(key));
+}
+
+function defaultMode() {
+  if (state.sel) return "select";
+  if (state.view === "archive") return "archive";
+  return state.live.length ? "home" : "open";
+}
+
+// show a short message in the pill, then settle back
+function flash(text, ms = 1600) {
+  els.dockMsg.textContent = text;
+  setMode("msg");
+  flashTimer = setTimeout(() => setMode(defaultMode()), ms);
+}
+
+/* ------------------------------------------------------------------ *
+ *  Home
+ * ------------------------------------------------------------------ */
+
+const GREETINGS = {
+  empty: ["Your reading, right here.", "Your reading, your pace."],
+  recent: ["Back to your page?", "Your next page awaits.", "Pick up where you left off.", "Your reading, your pace."],
+  archive: ["Saved for later.", "Your quiet shelf."],
+};
+
+function setGreeting(force) {
+  const cat = state.view === "archive" ? "archive" : state.live.length ? "recent" : "empty";
+  if (!force && cat === state.gcat) return;
+  state.gcat = cat;
+  els.greeting.textContent = pick(GREETINGS[cat]);
+  els.greeting.style.animation = "none";
+  void els.greeting.offsetWidth;
+  els.greeting.style.animation = "";
+}
+
+const CHECK = '<svg class="ic" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7"/></svg>';
+
+function cardFor(m) {
+  const li = document.createElement("li");
+  li.className = "card";
+  li.dataset.id = m.id;
+
+  const main = document.createElement("button");
+  main.type = "button";
+  main.className = "card-main";
+
+  const title = document.createElement("div");
+  title.className = "card-title";
+  title.textContent = stripExt(m.name);
+
+  const meta = document.createElement("div");
+  meta.className = "card-meta";
+  meta.textContent = m.total ? `Page ${m.page || 1} of ${m.total} · ${timeAgo(m.openedAt)}` : timeAgo(m.openedAt);
+
+  const bar = document.createElement("div");
+  bar.className = "card-bar";
+  const fill = document.createElement("i");
+  fill.style.width = m.total ? `${Math.round(((m.page || 1) / m.total) * 100)}%` : "0%";
+  bar.append(fill);
+
+  main.append(title, meta, bar);
+
+  const dot = document.createElement("button");
+  dot.type = "button";
+  dot.className = "dot";
+  dot.setAttribute("aria-label", "Select");
+  dot.innerHTML = CHECK;
+
+  li.append(main, dot);
+  return li;
+}
+
+async function refreshHome(settle = true) {
+  let all = [];
   try {
-    items = (await getAllMeta()).sort((a, b) => b.openedAt - a.openedAt);
+    all = (await getAllMeta()).sort((a, b) => b.openedAt - a.openedAt);
   } catch {
-    /* storage unavailable: just show an empty list */
+    /* storage unavailable: behave as empty */
   }
+  state.all = all;
+  state.live = all.filter((m) => !m.archived);
+  const archived = all.filter((m) => m.archived);
+  if (state.view === "archive" && !archived.length) state.view = "recent";
 
-  els.recentList.replaceChildren(
-    ...items.map((m) => {
-      const li = document.createElement("li");
+  const shown = state.view === "archive" ? archived : state.live;
+  if (state.sel && !shown.some((m) => m.id === state.sel)) state.sel = null;
 
-      const card = document.createElement("button");
-      card.type = "button";
-      card.className = "card";
-      card.addEventListener("click", () => openFromLibrary(m.id));
+  els.list.replaceChildren(...shown.map(cardFor));
+  markSel();
 
-      const title = document.createElement("div");
-      title.className = "card-title";
-      title.textContent = stripExt(m.name);
+  els.empty.hidden = shown.length > 0;
+  els.archiveChip.hidden = state.view === "archive" || !archived.length;
+  els.archiveChip.textContent = `Archive · ${archived.length}`;
 
-      const meta = document.createElement("div");
-      meta.className = "card-meta";
-      meta.textContent = m.total
-        ? `Page ${m.page || 1} of ${m.total} · ${timeAgo(m.openedAt)}`
-        : timeAgo(m.openedAt);
+  setGreeting(false);
+  if (settle) setMode(defaultMode());
+}
 
-      const bar = document.createElement("div");
-      bar.className = "card-bar";
-      const fill = document.createElement("i");
-      fill.style.width = m.total ? `${Math.round(((m.page || 1) / m.total) * 100)}%` : "0%";
-      bar.append(fill);
+function markSel() {
+  for (const li of els.list.children) li.classList.toggle("sel", li.dataset.id === state.sel);
+  const m = state.all.find((x) => x.id === state.sel);
+  els.archiveLabel.textContent = m && m.archived ? "Restore" : "Archive";
+}
 
-      card.append(title, meta, bar);
-
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.className = "card-remove";
-      remove.setAttribute("aria-label", "Remove from recent");
-      remove.innerHTML = X_ICON;
-      remove.addEventListener("click", async (e) => {
-        e.stopPropagation();
-        if (!confirm(`Remove “${stripExt(m.name)}” from Recent?`)) return;
-        await deleteBoth(m.id);
-        renderRecent();
-      });
-
-      li.append(card, remove);
-      return li;
-    })
-  );
-
-  els.recent.hidden = items.length === 0;
-  els.empty.hidden = items.length > 0;
+function toggleSelect(id, force) {
+  state.sel = force || state.sel !== id ? id : null;
+  markSel();
+  setMode(defaultMode());
 }
 
 function showHome() {
   els.reader.hidden = true;
   els.home.hidden = false;
-  renderRecent();
+  state.sel = null;
+  state.view = "recent";
+  refreshHome().then(() => setGreeting(true));
 }
 
-// Opens a PDF we just received (file picker or "Open with"), resuming progress if we've seen it before.
+/* --- tapping, selecting, long-press --- */
+
+let press = null;
+els.list.addEventListener("pointerdown", (e) => {
+  const card = e.target.closest(".card");
+  press = null;
+  if (!card || e.target.closest(".dot")) return;
+  press = { x: e.clientX, y: e.clientY, fired: false };
+  press.timer = setTimeout(() => {
+    press.fired = true;
+    if (navigator.vibrate) navigator.vibrate(12);
+    toggleSelect(card.dataset.id, true);
+  }, 450);
+});
+const cancelPress = () => press && clearTimeout(press.timer);
+els.list.addEventListener("pointermove", (e) => {
+  if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 10) cancelPress();
+});
+els.list.addEventListener("pointerup", cancelPress);
+els.list.addEventListener("pointercancel", cancelPress);
+els.list.addEventListener("contextmenu", (e) => e.preventDefault());
+
+els.list.addEventListener("click", (e) => {
+  if (press && press.fired) {
+    press = null; // this click is just the end of a long-press
+    return;
+  }
+  const card = e.target.closest(".card");
+  if (!card) {
+    if (state.sel) toggleSelect(state.sel);
+    return;
+  }
+  const id = card.dataset.id;
+  if (e.target.closest(".dot") || state.sel) toggleSelect(id);
+  else openFromLibrary(id);
+});
+
+/* --- pill buttons --- */
+
+const pickFile = () => els.fileInput.click();
+els.bOpen.addEventListener("click", pickFile);
+els.bAdd.addEventListener("click", pickFile);
+
+els.bRemove.addEventListener("click", () => {
+  const last = state.live[0];
+  if (!last) return;
+  state.pending = { type: "remove", id: last.id };
+  els.dockMsg.textContent = `Remove “${stripExt(last.name)}”?`;
+  setMode("confirm");
+});
+
+els.bNo.addEventListener("click", () => setMode(state.mode === "share" ? "select" : defaultMode()));
+
+els.bYes.addEventListener("click", async () => {
+  if (state.mode === "rename") return commitRename();
+  if (state.mode !== "confirm" || !state.pending) return;
+  const { type, id } = state.pending;
+  state.pending = null;
+  if (type === "remove") {
+    await deleteBoth(id).catch(() => {});
+    await refreshHome(false);
+    flash("Removed");
+  }
+});
+
+els.bArchive.addEventListener("click", async () => {
+  const m = state.all.find((x) => x.id === state.sel);
+  if (!m) return;
+  const archiving = !m.archived;
+  await putMeta({ ...m, archived: archiving });
+  state.sel = null;
+  await refreshHome(false);
+  flash(archiving ? "Archived" : "Restored");
+});
+
+els.bRename.addEventListener("click", () => {
+  const m = state.all.find((x) => x.id === state.sel);
+  if (!m) return;
+  els.renameInput.value = stripExt(m.name);
+  setMode("rename");
+  setTimeout(() => {
+    els.renameInput.focus();
+    els.renameInput.select();
+  }, 300);
+});
+els.renameInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    commitRename();
+  }
+});
+
+async function commitRename() {
+  const m = state.all.find((x) => x.id === state.sel);
+  const name = els.renameInput.value.trim().replace(/\.pdf$/i, "");
+  els.renameInput.blur();
+  if (!m || !name || name === stripExt(m.name)) {
+    setMode(defaultMode());
+    return;
+  }
+  await putMeta({ ...m, name: `${name}.pdf` });
+  state.sel = null;
+  await refreshHome(false);
+  flash("Renamed");
+}
+
+els.bShare.addEventListener("click", () => setMode("share"));
+els.bPdf.addEventListener("click", () => shareSelected("pdf"));
+els.bWord.addEventListener("click", () => shareSelected("word"));
+
+async function shareSelected(kind) {
+  const m = state.all.find((x) => x.id === state.sel);
+  if (!m) return;
+  flash(kind === "word" ? "Making your Word file…" : "Preparing…", 120000);
+  try {
+    const rec = await getBlob(m.id);
+    if (!rec) throw new Error("missing file");
+    const x = await loadExport();
+    const base = x.safeName(stripExt(m.name));
+
+    let result;
+    if (kind === "pdf") {
+      result = await x.shareFile(rec.blob, `${base}.pdf`, "application/pdf", base);
+    } else {
+      const pages = await x.textOfBlob(pdfjsLib, rec.blob);
+      if (!pages.some((p) => p.length)) {
+        flash("No text found in this PDF", 2600);
+        return;
+      }
+      result = await x.shareFile(x.buildDocx(pages), `${base}.docx`, x.DOCX_MIME, base);
+    }
+    if (result === "shared") state.sel = null;
+    markSel();
+    flash(result === "shared" ? "Shared" : "Cancelled");
+  } catch (err) {
+    console.warn("share failed", err);
+    flash("Couldn't share that", 2400);
+  }
+}
+
+els.archiveChip.addEventListener("click", () => {
+  state.view = "archive";
+  state.sel = null;
+  refreshHome();
+});
+els.bBack.addEventListener("click", () => {
+  state.view = "recent";
+  state.sel = null;
+  refreshHome();
+});
+
+// lift the pill above the keyboard if the page isn't resized for it
+if (window.visualViewport) {
+  const vv = window.visualViewport;
+  const fit = () => els.dock.style.setProperty("--kb", `${Math.max(0, window.innerHeight - vv.height - vv.offsetTop)}px`);
+  vv.addEventListener("resize", fit);
+  vv.addEventListener("scroll", fit);
+}
+
+/* ------------------------------------------------------------------ *
+ *  Getting a PDF in: file picker, library, "Open with"
+ * ------------------------------------------------------------------ */
+
 async function openBlob(blob, name, id) {
   let meta = null;
   try {
@@ -229,24 +470,29 @@ async function openBlob(blob, name, id) {
   openDocument({
     id,
     name,
-    size: blob.size,
     blob,
-    meta: meta || { id, name, size: blob.size, page: 1, idx: 0, frac: 0, zoom: 1, total: 0 },
+    meta: { ...(meta || { page: 1, idx: 0, frac: 0, zoom: 1, total: 0 }), id, name, size: blob.size, archived: false },
     persist: true,
   });
 }
 
-els.openBtn.addEventListener("click", () => els.fileInput.click());
-els.fileInput.addEventListener("change", async () => {
+els.fileInput.addEventListener("change", () => {
   const file = els.fileInput.files && els.fileInput.files[0];
   els.fileInput.value = "";
-  if (!file) return;
-  openBlob(file, file.name, `${file.name}|${file.size}|${file.lastModified}`);
+  if (file) openBlob(file, file.name, `${file.name}|${file.size}|${file.lastModified}`);
 });
 
-/* ------------------------------------------------------------------ *
- *  "Open with": a PDF handed to the app by Android (WhatsApp, Files, browser...)
- * ------------------------------------------------------------------ */
+async function openFromLibrary(id) {
+  try {
+    const meta = (await getAllMeta()).find((m) => m.id === id);
+    const rec = await getBlob(id);
+    if (!meta || !rec) throw new Error("missing");
+    openDocument({ id, name: meta.name, blob: rec.blob, meta, persist: false });
+  } catch {
+    toast("Couldn't open that file. Try opening it again.");
+    refreshHome();
+  }
+}
 
 function nameFromUri(uri) {
   let decoded = uri;
@@ -257,7 +503,7 @@ function nameFromUri(uri) {
   }
   const last = decoded.split("?")[0].split("/").pop() || "";
   if (/\.pdf$/i.test(last)) return last;
-  // content links from some apps carry no file name
+  // some apps share a link with no file name in it
   const d = new Date();
   return `PDF ${d.toLocaleDateString(undefined, { day: "numeric", month: "short" })} ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
 }
@@ -269,7 +515,7 @@ async function openFromUrl(url) {
   if (url === lastExternal.url && Date.now() - lastExternal.at < 3000) return;
   lastExternal = { url, at: Date.now() };
 
-  els.loading.hidden = false;
+  busy("Opening…");
   try {
     const res = await fetch(window.Capacitor.convertFileSrc(url));
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -283,25 +529,12 @@ async function openFromUrl(url) {
   }
 }
 
-async function openFromLibrary(id) {
-  try {
-    const metas = await getAllMeta();
-    const meta = metas.find((m) => m.id === id);
-    const rec = await getBlob(id);
-    if (!meta || !rec) throw new Error("missing");
-    openDocument({ id, name: meta.name, size: meta.size, blob: rec.blob, meta, persist: false });
-  } catch {
-    toast("Couldn't open that file. Try opening it again.");
-    renderRecent();
-  }
-}
-
 /* ------------------------------------------------------------------ *
  *  Opening + closing a document
  * ------------------------------------------------------------------ */
 
 async function openDocument({ id, name, blob, meta, persist }) {
-  els.loading.hidden = false;
+  busy("Opening…");
   closeDocument();
   const gen = ++state.gen;
 
@@ -383,14 +616,17 @@ function closeDocument() {
   state.pdf = null;
   state.pages = [];
   state.id = null;
+  state.textPages = null;
+  setTextView(false);
+  els.textView.replaceChildren();
   els.pages.replaceChildren();
 }
 
-els.backBtn.addEventListener("click", goHome);
 function goHome() {
   closeDocument();
   showHome();
 }
+els.backBtn.addEventListener("click", goHome);
 
 /* ------------------------------------------------------------------ *
  *  Layout: every page gets a fixed-size box up front, canvases come later
@@ -597,23 +833,29 @@ function sizeChanged() {
 }
 
 /* ------------------------------------------------------------------ *
- *  Scrolling, progress, toolbars
+ *  Scrolling, progress, toolbar
  * ------------------------------------------------------------------ */
 
+const scrollPos = () => (state.text ? els.textView.scrollTop : els.scroller.scrollTop);
+
 let saveTimer = 0;
+function onReadScroll() {
+  if (!state.chromeHidden && Math.abs(scrollPos() - state.chromeShownAt) > 80) setChrome(false);
+}
 els.scroller.addEventListener(
   "scroll",
   () => {
     schedule();
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => saveProgress(false), 500);
-    if (!state.chromeHidden && Math.abs(els.scroller.scrollTop - state.chromeShownAt) > 80) setChrome(false);
+    onReadScroll();
   },
   { passive: true }
 );
+els.textView.addEventListener("scroll", onReadScroll, { passive: true });
 
 function saveProgress(now) {
-  if (!state.pdf || !state.meta || !state.pages.length) return;
+  if (!state.pdf || !state.meta || !state.pages.length || state.text) return;
   const a = getAnchor(0);
   Object.assign(state.meta, {
     idx: a.idx,
@@ -632,15 +874,17 @@ document.addEventListener("visibilitychange", () => {
 function setChrome(visible) {
   state.chromeHidden = !visible;
   els.reader.classList.toggle("chrome-hidden", !visible);
-  if (visible) state.chromeShownAt = els.scroller.scrollTop;
+  if (visible) state.chromeShownAt = scrollPos();
 }
-els.scroller.addEventListener("click", () => {
+function tapToggleChrome() {
   if (window.getSelection && String(window.getSelection())) return;
   setChrome(state.chromeHidden);
-});
+}
+els.scroller.addEventListener("click", tapToggleChrome);
+els.textView.addEventListener("click", tapToggleChrome);
 
 /* ------------------------------------------------------------------ *
- *  Zoom: buttons and pinch
+ *  Zoom: buttons and pinch (in Text view the same buttons change text size)
  * ------------------------------------------------------------------ */
 
 function zoomAt(newZoom, cx, cy) {
@@ -660,15 +904,17 @@ function zoomAt(newZoom, cx, cy) {
   saveProgress(false);
 }
 
-const center = () => ({ x: els.scroller.clientWidth / 2, y: els.scroller.clientHeight / 2 });
-els.zoomIn.addEventListener("click", () => {
-  const c = center();
-  zoomAt(state.zoom * 1.25, c.x, c.y);
-});
-els.zoomOut.addEventListener("click", () => {
-  const c = center();
-  zoomAt(state.zoom / 1.25, c.x, c.y);
-});
+function zoomBy(factor) {
+  if (state.text) {
+    state.tz = clamp(state.tz * factor, 0.8, 2.4);
+    els.textView.style.setProperty("--tz", state.tz);
+    store("reader.tz", String(state.tz));
+    return;
+  }
+  zoomAt(state.zoom * factor, els.scroller.clientWidth / 2, els.scroller.clientHeight / 2);
+}
+els.zoomIn.addEventListener("click", () => zoomBy(1.25));
+els.zoomOut.addEventListener("click", () => zoomBy(1 / 1.25));
 
 // pinch: scale the pages with CSS while fingers are down, re-render on release
 let pinch = null;
@@ -745,10 +991,82 @@ function applyNight(on) {
 {
   const saved = store("reader.night");
   state.night = saved === null ? matchMedia("(prefers-color-scheme: dark)").matches : saved === "1";
+  state.tz = clamp(parseFloat(store("reader.tz")) || 1, 0.8, 2.4);
+  els.textView.style.setProperty("--tz", state.tz);
 }
 els.nightBtn.addEventListener("click", () => {
   applyNight(!state.night);
   store("reader.night", state.night ? "1" : "0");
+});
+
+/* ------------------------------------------------------------------ *
+ *  Text view: the same document as plain, reflowing text
+ * ------------------------------------------------------------------ */
+
+function setTextView(on) {
+  state.text = on;
+  els.reader.classList.toggle("as-text", on);
+  els.textView.hidden = !on;
+  els.textBtn.setAttribute("aria-pressed", String(on));
+}
+
+function renderText(pages) {
+  const frag = document.createDocumentFragment();
+  let first = true;
+  pages.forEach((paras, i) => {
+    if (!paras.length) return;
+    if (!first) {
+      const d = document.createElement("div");
+      d.className = "pg";
+      d.textContent = `${i + 1}`;
+      frag.append(d);
+    }
+    first = false;
+    for (const t of paras) {
+      const p = document.createElement("p");
+      p.textContent = t;
+      frag.append(p);
+    }
+  });
+  if (first) {
+    const p = document.createElement("p");
+    p.textContent = "No selectable text in this PDF. It may be a scan.";
+    frag.append(p);
+  }
+  els.textView.replaceChildren(frag);
+}
+
+els.textBtn.addEventListener("click", async () => {
+  if (!state.pdf) return;
+
+  if (state.text) {
+    setTextView(false);
+    els.scroller.scrollTop = state.scrollY;
+    setChrome(true);
+    return;
+  }
+
+  state.scrollY = els.scroller.scrollTop;
+  const gen = state.gen;
+  if (!state.textPages) {
+    busy("Reading the text…");
+    try {
+      const x = await loadExport();
+      const pages = await x.extractText(state.pdf, () => gen !== state.gen);
+      if (gen !== state.gen) return;
+      state.textPages = pages;
+      renderText(pages);
+    } catch (err) {
+      console.warn("text view failed", err);
+      if (gen === state.gen) toast("Couldn't read the text.");
+      return;
+    } finally {
+      if (gen === state.gen) els.loading.hidden = true;
+    }
+  }
+  setTextView(true);
+  els.textView.scrollTop = 0;
+  setChrome(true);
 });
 
 /* ------------------------------------------------------------------ *
@@ -779,7 +1097,7 @@ function closeSheet() {
 }
 
 /* ------------------------------------------------------------------ *
- *  Android back button
+ *  Android back button + files opened from other apps
  * ------------------------------------------------------------------ */
 
 const capApp = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
@@ -787,6 +1105,9 @@ if (capApp && capApp.addListener) {
   capApp.addListener("backButton", () => {
     if (!els.sheet.hidden) closeSheet();
     else if (state.pdf) goHome();
+    else if (["share", "rename", "confirm"].includes(state.mode)) setMode(state.mode === "share" ? "select" : defaultMode());
+    else if (state.sel) toggleSelect(state.sel);
+    else if (state.view === "archive") els.bBack.click();
     else capApp.exitApp();
   });
 
@@ -806,4 +1127,4 @@ if (capApp && capApp.addListener) {
  * ------------------------------------------------------------------ */
 
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
-renderRecent();
+refreshHome();

@@ -41,6 +41,9 @@ jobs:
           key: gradle-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
           restore-keys: gradle-${{ runner.os }}-
 
+      - name: Read the version
+        run: echo "VERSION_NAME=$(tr -d '[:space:]' < VERSION)" >> "$GITHUB_ENV"
+
       - name: Install dependencies
         run: npm ci
 
@@ -53,7 +56,6 @@ jobs:
       - name: Apply icon, splash and version number
         env:
           VERSION_CODE: ${{ github.run_number }}
-          VERSION_NAME: 1.0.${{ github.run_number }}
         run: |
           node scripts/patch-android.mjs
           npx cap sync android
@@ -99,16 +101,23 @@ jobs:
         if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_NUMBER: ${{ github.run_number }}
         run: |
+          TAG="v$VERSION_NAME"
           if [ "$SIGNING" = "release" ]; then
-            NOTES="Download **$APK_NAME** below and open it on your Android phone. It installs as **Reader** and updates over the previous version."
+            INSTALL_NOTE="It installs as **Reader** and updates over the previous version."
           else
-            NOTES="Download **$APK_NAME** below and open it on your Android phone. It installs as **Reader**. This build uses a temporary debug key, so uninstall the old version before installing a new one (see README: permanent signing)."
+            INSTALL_NOTE="It installs as **Reader**. This build uses a temporary debug key, so uninstall any older Reader first (see README: permanent signing)."
           fi
-          gh release delete latest --cleanup-tag --yes || true
-          gh release create latest "dist/$APK_NAME" \
-            --title "Reader by Key 1.0.$RUN_NUMBER" \
-            --notes "$NOTES" \
+          {
+            echo "Download **$APK_NAME** below and open it on your Android phone. $INSTALL_NOTE"
+            echo
+            cat RELEASE_NOTES.md
+          } > "$RUNNER_TEMP/notes.md"
+
+          gh release delete "$TAG" --cleanup-tag --yes || true
+          gh release delete latest --cleanup-tag --yes || true   # the old rolling release, if it still exists
+          gh release create "$TAG" "dist/$APK_NAME" \
+            --title "Reader by Key $VERSION_NAME" \
+            --notes-file "$RUNNER_TEMP/notes.md" \
             --target "$GITHUB_SHA" \
             --latest

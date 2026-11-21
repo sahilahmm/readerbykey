@@ -19,8 +19,9 @@ mkdirSync(out, { recursive: true });
 cpSync(join(pdfjs, "legacy", "build", "pdf.min.mjs"), join(out, "pdf.min.mjs"));
 cpSync(join(pdfjs, "legacy", "build", "pdf.worker.min.mjs"), join(out, "pdf.worker.min.mjs"));
 
-// Optional resources PDF.js loads on demand (fonts, color profiles, image decoders)
-for (const dir of ["cmaps", "standard_fonts", "iccs", "wasm"]) {
+// Resources PDF.js loads on demand (fonts, color profiles, image decoders).
+// The big CJK character maps (cmaps) are left out to keep the app small.
+for (const dir of ["standard_fonts", "iccs", "wasm"]) {
   if (existsSync(join(pdfjs, dir))) cpSync(join(pdfjs, dir), join(out, dir), { recursive: true });
 }
 

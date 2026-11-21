@@ -8,45 +8,64 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <g id="i-plus"><path d="M12 5v14M5 12h14"/></g>
+      <g id="i-minus"><path d="M5 12h14"/></g>
+      <g id="i-x"><path d="M6 6l12 12M18 6L6 18"/></g>
+      <g id="i-check"><path d="M5 12.5l4.5 4.5L19 7"/></g>
+      <g id="i-back"><path d="M15 5l-7 7 7 7"/></g>
+      <g id="i-share"><path d="M12 15V4M7.5 8.5L12 4l4.5 4.5M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></g>
+      <g id="i-edit"><path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 0 1 3 3L8 19l-4 1zM14 7l3 3"/></g>
+      <g id="i-archive"><rect x="3" y="4" width="18" height="5" rx="2"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4"/></g>
+      <g id="i-moon"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></g>
+      <g id="i-text"><path d="M4 6h16M4 10h11M4 14h16M4 18h9"/></g>
+    </defs>
+  </svg>
+
   <!-- HOME -->
   <main id="home" class="screen">
-    <header class="home-head">
-      <h1>Reader</h1>
-      <p>Open a PDF and pick up where you left off.</p>
-    </header>
+    <button id="archiveChip" class="chip" type="button" hidden></button>
+    <h1 id="greeting"></h1>
 
-    <button id="openBtn" class="primary" type="button">Open a PDF</button>
+    <ul id="list" class="list"></ul>
+    <p id="empty" class="empty">Nothing here yet</p>
+
+    <nav id="dock" class="dock" aria-live="polite">
+      <div class="seg" data-s="open"><button id="bOpen" type="button"><svg class="ic" viewBox="0 0 24 24"><use href="#i-plus"/></svg><span>Open a PDF</span></button></div>
+      <div class="seg" data-s="add"><button id="bAdd" type="button" aria-label="Open another PDF"><svg class="ic" viewBox="0 0 24 24"><use href="#i-plus"/></svg></button></div>
+      <div class="seg" data-s="remove"><button id="bRemove" type="button" aria-label="Remove last file"><svg class="ic" viewBox="0 0 24 24"><use href="#i-x"/></svg></button></div>
+
+      <div class="seg" data-s="share"><button id="bShare" type="button"><svg class="ic" viewBox="0 0 24 24"><use href="#i-share"/></svg><span>Share</span></button></div>
+      <div class="seg" data-s="rename"><button id="bRename" type="button"><svg class="ic" viewBox="0 0 24 24"><use href="#i-edit"/></svg><span>Rename</span></button></div>
+      <div class="seg" data-s="archive"><button id="bArchive" type="button"><svg class="ic" viewBox="0 0 24 24"><use href="#i-archive"/></svg><span id="archiveLabel">Archive</span></button></div>
+
+      <div class="seg" data-s="pdf"><button id="bPdf" type="button"><span>PDF</span></button></div>
+      <div class="seg" data-s="word"><button id="bWord" type="button"><span>Word</span></button></div>
+
+      <div class="seg" data-s="input"><input id="renameInput" type="text" maxlength="80" enterkeyhint="done" autocomplete="off" aria-label="New name" /></div>
+      <div class="seg" data-s="msg"><div id="dockMsg" class="msg"></div></div>
+      <div class="seg" data-s="yes"><button id="bYes" type="button" aria-label="Confirm"><svg class="ic" viewBox="0 0 24 24"><use href="#i-check"/></svg></button></div>
+      <div class="seg" data-s="no"><button id="bNo" type="button" aria-label="Cancel"><svg class="ic" viewBox="0 0 24 24"><use href="#i-x"/></svg></button></div>
+      <div class="seg" data-s="back"><button id="bBack" type="button"><svg class="ic" viewBox="0 0 24 24"><use href="#i-back"/></svg><span>Recent</span></button></div>
+    </nav>
+
     <input id="fileInput" type="file" accept="application/pdf,.pdf" hidden />
-
-    <section id="recent" hidden>
-      <h2>Recent</h2>
-      <ul id="recentList"></ul>
-    </section>
-
-    <p id="empty" class="empty">Nothing here yet.</p>
   </main>
 
   <!-- READER -->
   <section id="reader" class="screen" hidden>
     <header id="bar" class="bar">
-      <button id="backBtn" class="icon" type="button" aria-label="Back">
-        <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
-      </button>
+      <button id="backBtn" class="icon" type="button" aria-label="Back"><svg class="ic" viewBox="0 0 24 24"><use href="#i-back"/></svg></button>
       <h2 id="title" class="bar-title"></h2>
-      <button id="nightBtn" class="icon" type="button" aria-label="Night pages" aria-pressed="false">
-        <svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>
-      </button>
-      <button id="zoomOut" class="icon" type="button" aria-label="Zoom out">
-        <svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg>
-      </button>
-      <button id="zoomIn" class="icon" type="button" aria-label="Zoom in">
-        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
-      </button>
+      <button id="textBtn" class="icon" type="button" aria-label="Read as text" aria-pressed="false"><svg class="ic" viewBox="0 0 24 24"><use href="#i-text"/></svg></button>
+      <button id="nightBtn" class="icon" type="button" aria-label="Night pages" aria-pressed="false"><svg class="ic" viewBox="0 0 24 24"><use href="#i-moon"/></svg></button>
+      <button id="zoomOut" class="icon" type="button" aria-label="Smaller"><svg class="ic" viewBox="0 0 24 24"><use href="#i-minus"/></svg></button>
+      <button id="zoomIn" class="icon" type="button" aria-label="Larger"><svg class="ic" viewBox="0 0 24 24"><use href="#i-plus"/></svg></button>
     </header>
 
-    <div id="scroller" class="scroller">
-      <div id="pages" class="pages"></div>
-    </div>
+    <div id="scroller" class="scroller"><div id="pages" class="pages"></div></div>
+    <article id="textView" class="textview" hidden></article>
 
     <button id="pill" class="pill" type="button" aria-label="Go to page">1 / 1</button>
   </section>
@@ -57,7 +76,7 @@
       <label for="jumpInput">Go to page</label>
       <div class="sheet-row">
         <input id="jumpInput" type="number" inputmode="numeric" min="1" required />
-        <button class="primary" type="submit">Go</button>
+        <button class="go" type="submit">Go</button>
       </div>
     </form>
   </div>
