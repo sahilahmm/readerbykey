@@ -218,12 +218,8 @@ function showHome() {
   renderRecent();
 }
 
-els.openBtn.addEventListener("click", () => els.fileInput.click());
-els.fileInput.addEventListener("change", async () => {
-  const file = els.fileInput.files && els.fileInput.files[0];
-  els.fileInput.value = "";
-  if (!file) return;
-  const id = `${file.name}|${file.size}|${file.lastModified}`;
+// Opens a PDF we just received (file picker or "Open with"), resuming progress if we've seen it before.
+async function openBlob(blob, name, id) {
   let meta = null;
   try {
     meta = (await getAllMeta()).find((m) => m.id === id) || null;
@@ -232,13 +228,60 @@ els.fileInput.addEventListener("change", async () => {
   }
   openDocument({
     id,
-    name: file.name,
-    size: file.size,
-    blob: file,
-    meta: meta || { id, name: file.name, size: file.size, page: 1, idx: 0, frac: 0, zoom: 1, total: 0 },
+    name,
+    size: blob.size,
+    blob,
+    meta: meta || { id, name, size: blob.size, page: 1, idx: 0, frac: 0, zoom: 1, total: 0 },
     persist: true,
   });
+}
+
+els.openBtn.addEventListener("click", () => els.fileInput.click());
+els.fileInput.addEventListener("change", async () => {
+  const file = els.fileInput.files && els.fileInput.files[0];
+  els.fileInput.value = "";
+  if (!file) return;
+  openBlob(file, file.name, `${file.name}|${file.size}|${file.lastModified}`);
 });
+
+/* ------------------------------------------------------------------ *
+ *  "Open with": a PDF handed to the app by Android (WhatsApp, Files, browser...)
+ * ------------------------------------------------------------------ */
+
+function nameFromUri(uri) {
+  let decoded = uri;
+  try {
+    decoded = decodeURIComponent(uri);
+  } catch {
+    /* keep raw */
+  }
+  const last = decoded.split("?")[0].split("/").pop() || "";
+  if (/\.pdf$/i.test(last)) return last;
+  // content links from some apps carry no file name
+  const d = new Date();
+  return `PDF ${d.toLocaleDateString(undefined, { day: "numeric", month: "short" })} ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+}
+
+let lastExternal = { url: "", at: 0 };
+async function openFromUrl(url) {
+  if (!/^(content|file):\/\//i.test(url || "")) return;
+  // Android can deliver the same intent twice (launch + resume); ignore the echo
+  if (url === lastExternal.url && Date.now() - lastExternal.at < 3000) return;
+  lastExternal = { url, at: Date.now() };
+
+  els.loading.hidden = false;
+  try {
+    const res = await fetch(window.Capacitor.convertFileSrc(url));
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    if (!blob.size) throw new Error("empty");
+    await openBlob(blob, nameFromUri(url), `${url}|${blob.size}`);
+  } catch (err) {
+    console.warn("open-with failed", err);
+    els.loading.hidden = true;
+    toast("Couldn't open that file.");
+  }
+}
 
 async function openFromLibrary(id) {
   try {
@@ -746,6 +789,16 @@ if (capApp && capApp.addListener) {
     else if (state.pdf) goHome();
     else capApp.exitApp();
   });
+
+  // app already running when a PDF is opened with Reader
+  capApp.addListener("appUrlOpen", (e) => openFromUrl(e && e.url));
+  // app was closed: it was started by the PDF itself
+  if (capApp.getLaunchUrl) {
+    capApp
+      .getLaunchUrl()
+      .then((r) => r && openFromUrl(r.url))
+      .catch(() => {});
+  }
 }
 
 /* ------------------------------------------------------------------ *

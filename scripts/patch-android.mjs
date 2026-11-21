@@ -53,7 +53,26 @@ styles = styles.replace(
 );
 writeFileSync(stylesPath, styles);
 
-// 5. version numbers
+// 5. "Open with": make Reader show up when you tap a PDF in WhatsApp, Files, a browser, etc.
+const manifestPath = join(root, "android", "app", "src", "main", "AndroidManifest.xml");
+let manifest = readFileSync(manifestPath, "utf8");
+if (!manifest.includes("android:mimeType=\"application/pdf\"")) {
+  const pdfFilter = `
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="application/pdf" />
+            </intent-filter>
+`;
+  if (!manifest.includes("</activity>")) throw new Error("Activity not found in AndroidManifest.xml");
+  manifest = manifest.replace("</activity>", `${pdfFilter}\n        </activity>`);
+  writeFileSync(manifestPath, manifest);
+}
+
+// 6. version numbers
 const code = parseInt(process.env.VERSION_CODE || "1", 10);
 const name = process.env.VERSION_NAME || "1.0";
 let gradle = readFileSync(gradleFile, "utf8");

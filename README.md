@@ -14,7 +14,7 @@ Open that link on your phone, then install the file. Android will ask you to all
 
 ## What it does
 
-- Open any PDF from your phone
+- Open any PDF from your phone, or tap a PDF in WhatsApp, Files or a browser and choose Reader ("Open with")
 - Smooth continuous scrolling, pinch to zoom, zoom buttons
 - Remembers the page and zoom for each file; the Recent list shows your progress
 - Go to page (tap the page number)
