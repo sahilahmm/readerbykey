@@ -66,7 +66,7 @@ function toParagraphs(items) {
 const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
 const esc = (s) =>
   s
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/g, "")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
@@ -178,10 +178,25 @@ const toBase64 = (blob) =>
 
 const isCancel = (err) => /cancel|abort/i.test(`${err && err.name} ${err && err.message}`);
 
-// Resolves "shared" or "cancelled"; throws if sharing really failed.
-export async function shareFile(blob, filename, mime, title) {
+// two files can have the same name; the second becomes "Name (2).pdf"
+function uniqueNames(items) {
+  const used = new Set();
+  return items.map((it) => {
+    let name = it.filename;
+    const dot = name.lastIndexOf(".");
+    const stem = dot > 0 ? name.slice(0, dot) : name;
+    const ext = dot > 0 ? name.slice(dot) : "";
+    for (let n = 2; used.has(name.toLowerCase()); n++) name = `${stem} (${n})${ext}`;
+    used.add(name.toLowerCase());
+    return { ...it, filename: name };
+  });
+}
+
+// items: [{ blob, filename, mime }]. Resolves "shared" or "cancelled"; throws if sharing really failed.
+export async function shareFiles(items, title) {
   const cap = window.Capacitor;
   const plugins = cap && cap.Plugins;
+  const files = uniqueNames(items);
 
   try {
     if (plugins && plugins.Share && plugins.Filesystem && cap.isNativePlatform && cap.isNativePlatform()) {
@@ -190,31 +205,41 @@ export async function shareFile(blob, filename, mime, title) {
       } catch {
         /* nothing to clean */
       }
-      const { uri } = await plugins.Filesystem.writeFile({
-        path: `shared/${filename}`,
-        data: await toBase64(blob),
-        directory: "CACHE",
-        recursive: true,
-      });
-      await plugins.Share.share({ title, files: [uri], dialogTitle: title });
+      const uris = [];
+      for (const f of files) {
+        const { uri } = await plugins.Filesystem.writeFile({
+          path: `shared/${f.filename}`,
+          data: await toBase64(f.blob),
+          directory: "CACHE",
+          recursive: true,
+        });
+        uris.push(uri);
+      }
+      await plugins.Share.share({ title, files: uris, dialogTitle: title });
       return "shared";
     }
 
-    const file = new File([blob], filename, { type: mime });
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({ files: [file], title });
+    const webFiles = files.map((f) => new File([f.blob], f.filename, { type: f.mime }));
+    if (navigator.canShare && navigator.canShare({ files: webFiles })) {
+      await navigator.share({ files: webFiles, title });
       return "shared";
     }
 
-    // no share sheet available (desktop browser): save the file instead
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(file);
-    a.download = filename;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    // no share sheet available (desktop browser): save the files instead
+    webFiles.forEach((file, i) =>
+      setTimeout(() => {
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(file);
+        a.download = file.name;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      }, i * 300)
+    );
     return "shared";
   } catch (err) {
     if (isCancel(err)) return "cancelled";
     throw err;
   }
 }
+
+export const shareFile = (blob, filename, mime, title) => shareFiles([{ blob, filename, mime }], title);

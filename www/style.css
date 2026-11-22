@@ -109,6 +109,7 @@ button { font: inherit; color: inherit; }
   font-weight: 600;
 }
 .chip:active { opacity: 0.8; }
+#allChip { right: auto; left: 16px; } /* "Select all" sits opposite the Archive chip */
 
 /* the list sits at the bottom, newest file closest to the thumb */
 .list {
@@ -374,6 +375,15 @@ button { font: inherit; color: inherit; }
   -webkit-overflow-scrolling: touch;
 }
 .textview p { max-width: 36em; margin: 0 auto 1em; }
+.textview h2,
+.textview h3 {
+  max-width: 36em;
+  margin: 1.3em auto 0.5em;
+  font-size: 1.35em;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.textview h3 { font-size: 1.12em; }
 .textview .pg {
   margin: 28px 0;
   text-align: center;
@@ -381,6 +391,11 @@ button { font: inherit; color: inherit; }
   letter-spacing: 0.12em;
   opacity: 0.55;
 }
+
+/* Word and text files are already text: no Text view button, line breaks kept, Night applies */
+.textdoc #textBtn { display: none; }
+.textdoc .textview p { white-space: pre-line; }
+.textdoc.night .textview { background: #000; color: var(--cream); }
 
 .pill {
   position: fixed;
@@ -451,11 +466,15 @@ button { font: inherit; color: inherit; }
   font-size: 22px;
 }
 
+/* sits just above the pill, with an Undo button when the action can be taken back */
 .toast {
   position: fixed;
   left: 50%;
-  bottom: calc(var(--bottom) + 80px);
+  bottom: calc(var(--bottom) + 16px + var(--dock-h) + 12px);
   z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 14px;
   max-width: calc(100% - 40px);
   padding: 12px 20px;
   border-radius: 999px;
@@ -465,3 +484,17 @@ button { font: inherit; color: inherit; }
   text-align: center;
   transform: translateX(-50%);
 }
+.toast span { min-width: 0; }
+.toast button {
+  flex: none;
+  min-height: 34px;
+  margin: -6px -12px -6px 0;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--seg);
+  color: inherit;
+  font-size: 14px;
+  font-weight: 700;
+}
+.toast button:active { filter: brightness(0.9); }

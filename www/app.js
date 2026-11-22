@@ -16,15 +16,24 @@ const PDF_OPTIONS = {
   wasmUrl: new URL("./lib/wasm/", import.meta.url).href,
 };
 
+const DOC_EXT = /\.(pdf|docx|txt)$/i;
+const EXT = { pdf: ".pdf", docx: ".docx", txt: ".txt" };
+const MIME = {
+  pdf: "application/pdf",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  txt: "text/plain",
+};
+const KIND_LABEL = { docx: "Word", txt: "Text" };
+
 const $ = (id) => document.getElementById(id);
 const els = Object.fromEntries(
   [
-    "home", "reader", "list", "empty", "greeting", "archiveChip", "dock", "fileInput",
-    "bOpen", "bAdd", "bRemove", "bShare", "bRename", "bArchive", "archiveLabel",
+    "home", "reader", "list", "empty", "greeting", "archiveChip", "allChip", "dock", "fileInput",
+    "bOpen", "bAdd", "bRemove", "bShare", "bRename", "bArchive", "bDelete", "archiveLabel",
     "bPdf", "bWord", "bYes", "bNo", "bBack", "renameInput", "dockMsg",
     "bar", "title", "backBtn", "textBtn", "nightBtn", "zoomIn", "zoomOut",
     "scroller", "pages", "textView", "pill", "sheet", "jumpForm", "jumpInput",
-    "loading", "toast",
+    "loading", "toast", "toastMsg", "toastUndo",
   ].map((id) => [id, $(id)])
 );
 
@@ -32,12 +41,16 @@ const state = {
   // home
   all: [], // every saved file's meta
   live: [], // not archived, newest first
+  shown: [], // what the list on screen holds
   view: "recent", // "recent" | "archive"
-  sel: null, // selected file id
+  sel: new Set(), // selected file ids
   mode: "open", // dock mode
   pending: null, // what the confirm button will do
   gcat: "", // greeting category
+  undo: null, // what the toast's Undo button will do
   // reader
+  open: false, // a document (of any kind) is open
+  kind: null, // "pdf" | "docx" | "txt"
   pdf: null,
   id: null,
   meta: null,
@@ -60,9 +73,11 @@ const state = {
 
 let exportMod = null;
 const loadExport = () => (exportMod ??= import("./export.js"));
+let docsMod = null;
+const loadDocs = () => (docsMod ??= import("./docs.js"));
 
 /* ------------------------------------------------------------------ *
- *  Storage (IndexedDB): small "meta" rows + the PDF blobs
+ *  Storage (IndexedDB): small "meta" rows + the file blobs
  * ------------------------------------------------------------------ */
 
 const META = "meta";
@@ -120,8 +135,13 @@ async function trimRecent() {
  * ------------------------------------------------------------------ */
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
-const stripExt = (name) => name.replace(/\.pdf$/i, "");
+const stripExt = (name) => name.replace(DOC_EXT, "");
+const kindOf = (m) => m.kind || "pdf"; // files saved before Word/text support are PDFs
+const extOf = (m) => (m.name.match(DOC_EXT) || [EXT[kindOf(m)]])[0];
+// a name with no extension at all gets the right one; ".md" and friends are left alone
+const withExt = (name, kind) => (/\.[A-Za-z0-9]{1,5}$/.test(name) ? name : name + EXT[kind]);
 const pick = (list) => list[Math.floor(Math.random() * list.length)];
+const selMetas = () => state.all.filter((m) => state.sel.has(m.id));
 
 function store(key, value) {
   try {
@@ -132,13 +152,32 @@ function store(key, value) {
   }
 }
 
+// A toast with an Undo button (when `undo` is given) stays a little longer.
 let toastTimer = 0;
-function toast(msg) {
-  els.toast.textContent = msg;
+function hideToast() {
+  clearTimeout(toastTimer);
+  els.toast.hidden = true;
+  state.undo = null; // lets go of anything the undo was holding on to
+}
+function toast(msg, undo) {
+  els.toastMsg.textContent = msg;
+  els.toastUndo.hidden = !undo;
+  state.undo = undo || null;
   els.toast.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => (els.toast.hidden = true), 2800);
+  toastTimer = setTimeout(hideToast, undo ? 6000 : 2800);
 }
+els.toastUndo.addEventListener("click", async () => {
+  const fn = state.undo;
+  hideToast();
+  if (!fn) return;
+  try {
+    await fn();
+  } catch (err) {
+    console.warn("undo failed", err);
+    toast("Couldn't undo that");
+  }
+});
 
 function busy(text) {
   els.loading.textContent = text;
@@ -162,13 +201,14 @@ const seg = {};
 els.dock.querySelectorAll(".seg").forEach((e) => (seg[e.dataset.s] = e));
 
 const MODES = {
-  open: ["open"], //                    nothing saved yet
-  home: ["add", "remove"], //           something is in Recent
-  select: ["share", "rename", "archive"], // a file is selected
+  open: ["open"], //                          nothing saved yet
+  home: ["add", "remove"], //                 something is in Recent
+  select: ["share", "rename", "archive"], //  one file is selected
+  multi: ["share", "archive", "delete"], //   two or more are selected
   share: ["pdf", "word", "no"],
   rename: ["input", "yes"],
   confirm: ["msg", "yes", "no"],
-  msg: ["msg"], //                      a short status, then back to normal
+  msg: ["msg"], //                            a short status, then back to normal
   archive: ["back"],
 };
 
@@ -182,7 +222,8 @@ function setMode(name) {
 }
 
 function defaultMode() {
-  if (state.sel) return "select";
+  if (state.sel.size > 1) return "multi";
+  if (state.sel.size) return "select";
   if (state.view === "archive") return "archive";
   return state.live.length ? "home" : "open";
 }
@@ -229,14 +270,29 @@ function cardFor(m) {
   title.className = "card-title";
   title.textContent = stripExt(m.name);
 
+  // PDFs count pages; Word and text files show how far you have read
+  const kind = kindOf(m);
+  const pct = Math.round((m.pct || 0) * 100);
+  let progress = 0;
+  let line = timeAgo(m.openedAt);
+  if (kind === "pdf") {
+    if (m.total) {
+      progress = Math.round(((m.page || 1) / m.total) * 100);
+      line = `Page ${m.page || 1} of ${m.total} · ${line}`;
+    }
+  } else {
+    progress = pct;
+    line = `${KIND_LABEL[kind]} · ${pct > 0 ? `${pct}% · ` : ""}${line}`;
+  }
+
   const meta = document.createElement("div");
   meta.className = "card-meta";
-  meta.textContent = m.total ? `Page ${m.page || 1} of ${m.total} · ${timeAgo(m.openedAt)}` : timeAgo(m.openedAt);
+  meta.textContent = line;
 
   const bar = document.createElement("div");
   bar.className = "card-bar";
   const fill = document.createElement("i");
-  fill.style.width = m.total ? `${Math.round(((m.page || 1) / m.total) * 100)}%` : "0%";
+  fill.style.width = `${progress}%`;
   bar.append(fill);
 
   main.append(title, meta, bar);
@@ -264,7 +320,8 @@ async function refreshHome(settle = true) {
   if (state.view === "archive" && !archived.length) state.view = "recent";
 
   const shown = state.view === "archive" ? archived : state.live;
-  if (state.sel && !shown.some((m) => m.id === state.sel)) state.sel = null;
+  state.shown = shown;
+  for (const id of [...state.sel]) if (!shown.some((m) => m.id === id)) state.sel.delete(id);
 
   els.list.replaceChildren(...shown.map(cardFor));
   markSel();
@@ -278,21 +335,42 @@ async function refreshHome(settle = true) {
 }
 
 function markSel() {
-  for (const li of els.list.children) li.classList.toggle("sel", li.dataset.id === state.sel);
-  const m = state.all.find((x) => x.id === state.sel);
-  els.archiveLabel.textContent = m && m.archived ? "Restore" : "Archive";
+  for (const li of els.list.children) li.classList.toggle("sel", state.sel.has(li.dataset.id));
+  const ms = selMetas();
+  els.archiveLabel.textContent = ms.length && ms.every((m) => m.archived) ? "Restore" : "Archive";
+
+  // "Select all" shows up once you are selecting and there is more than one file
+  const n = state.sel.size;
+  els.allChip.hidden = !(n > 0 && state.shown.length > 1);
+  els.allChip.textContent = n >= state.shown.length ? "Clear" : "Select all";
 }
 
-function toggleSelect(id, force) {
-  state.sel = force || state.sel !== id ? id : null;
+function toggleSelect(id, on) {
+  const want = on ?? !state.sel.has(id);
+  if (want) state.sel.add(id);
+  else state.sel.delete(id);
   markSel();
   setMode(defaultMode());
 }
 
+function clearSel() {
+  state.sel.clear();
+  markSel();
+  setMode(defaultMode());
+}
+
+els.allChip.addEventListener("click", () => {
+  const everyone = state.shown.length > 0 && state.shown.every((m) => state.sel.has(m.id));
+  if (everyone) state.sel.clear();
+  else for (const m of state.shown) state.sel.add(m.id);
+  markSel();
+  setMode(defaultMode());
+});
+
 function showHome() {
   els.reader.hidden = true;
   els.home.hidden = false;
-  state.sel = null;
+  state.sel.clear();
   state.view = "recent";
   refreshHome().then(() => setGreeting(true));
 }
@@ -326,11 +404,12 @@ els.list.addEventListener("click", (e) => {
   }
   const card = e.target.closest(".card");
   if (!card) {
-    if (state.sel) toggleSelect(state.sel);
+    if (state.sel.size) clearSel();
     return;
   }
   const id = card.dataset.id;
-  if (e.target.closest(".dot") || state.sel) toggleSelect(id);
+  // once something is selected, a tap on any card adds it or takes it away
+  if (e.target.closest(".dot") || state.sel.size) toggleSelect(id);
   else openFromLibrary(id);
 });
 
@@ -343,37 +422,70 @@ els.bAdd.addEventListener("click", pickFile);
 els.bRemove.addEventListener("click", () => {
   const last = state.live[0];
   if (!last) return;
-  state.pending = { type: "remove", id: last.id };
+  state.pending = { type: "remove", ids: [last.id] };
   els.dockMsg.textContent = `Remove “${stripExt(last.name)}”?`;
   setMode("confirm");
 });
 
-els.bNo.addEventListener("click", () => setMode(state.mode === "share" ? "select" : defaultMode()));
+els.bDelete.addEventListener("click", () => {
+  const ids = [...state.sel];
+  if (!ids.length) return;
+  state.pending = { type: "remove", ids };
+  els.dockMsg.textContent = ids.length > 1 ? `Remove ${ids.length} files?` : "Remove this file?";
+  setMode("confirm");
+});
+
+els.bNo.addEventListener("click", () => setMode(defaultMode()));
 
 els.bYes.addEventListener("click", async () => {
   if (state.mode === "rename") return commitRename();
   if (state.mode !== "confirm" || !state.pending) return;
-  const { type, id } = state.pending;
+  const { type, ids } = state.pending;
   state.pending = null;
-  if (type === "remove") {
-    await deleteBoth(id).catch(() => {});
-    await refreshHome(false);
-    flash("Removed");
-  }
+  if (type === "remove") await removeFiles(ids);
 });
 
+// Deleting keeps the files in memory for a few seconds so the toast can bring them back.
+async function removeFiles(ids) {
+  const saved = [];
+  for (const id of ids) {
+    const meta = state.all.find((m) => m.id === id);
+    const rec = await getBlob(id).catch(() => null);
+    if (meta && rec) saved.push({ meta, blob: rec.blob });
+    await deleteBoth(id).catch(() => {});
+  }
+  state.sel.clear();
+  await refreshHome();
+  toast(
+    ids.length > 1 ? `Removed ${ids.length} files` : "Removed",
+    saved.length
+      ? async () => {
+          for (const s of saved) await putBoth(s.meta, s.blob);
+          await refreshHome();
+        }
+      : null
+  );
+}
+
 els.bArchive.addEventListener("click", async () => {
-  const m = state.all.find((x) => x.id === state.sel);
-  if (!m) return;
-  const archiving = !m.archived;
-  await putMeta({ ...m, archived: archiving });
-  state.sel = null;
-  await refreshHome(false);
-  flash(archiving ? "Archived" : "Restored");
+  const ms = selMetas();
+  if (!ms.length) return;
+  const archiving = !ms[0].archived;
+  for (const m of ms) await putMeta({ ...m, archived: archiving });
+  state.sel.clear();
+  await refreshHome();
+  const word = archiving ? "Archived" : "Restored";
+  toast(ms.length > 1 ? `${word} ${ms.length} files` : word, async () => {
+    for (const m of ms) {
+      const cur = state.all.find((x) => x.id === m.id);
+      if (cur) await putMeta({ ...cur, archived: !archiving });
+    }
+    await refreshHome();
+  });
 });
 
 els.bRename.addEventListener("click", () => {
-  const m = state.all.find((x) => x.id === state.sel);
+  const m = selMetas()[0];
   if (!m) return;
   els.renameInput.value = stripExt(m.name);
   setMode("rename");
@@ -390,47 +502,67 @@ els.renameInput.addEventListener("keydown", (e) => {
 });
 
 async function commitRename() {
-  const m = state.all.find((x) => x.id === state.sel);
-  const name = els.renameInput.value.trim().replace(/\.pdf$/i, "");
+  const m = selMetas()[0];
+  const name = els.renameInput.value.trim().replace(DOC_EXT, "");
   els.renameInput.blur();
   if (!m || !name || name === stripExt(m.name)) {
     setMode(defaultMode());
     return;
   }
-  await putMeta({ ...m, name: `${name}.pdf` });
-  state.sel = null;
-  await refreshHome(false);
-  flash("Renamed");
+  await putMeta({ ...m, name: `${name}${extOf(m)}` });
+  state.sel.clear();
+  await refreshHome();
+  toast("Renamed", async () => {
+    const cur = state.all.find((x) => x.id === m.id);
+    if (cur) await putMeta({ ...cur, name: m.name });
+    await refreshHome();
+  });
 }
 
-els.bShare.addEventListener("click", () => setMode("share"));
-els.bPdf.addEventListener("click", () => shareSelected("pdf"));
+// PDFs can go out as PDF or Word; Word and text files go out as they are
+els.bShare.addEventListener("click", () => {
+  const ms = selMetas();
+  if (!ms.length) return;
+  if (ms.every((m) => kindOf(m) === "pdf")) setMode("share");
+  else shareSelected("original");
+});
+els.bPdf.addEventListener("click", () => shareSelected("original"));
 els.bWord.addEventListener("click", () => shareSelected("word"));
 
-async function shareSelected(kind) {
-  const m = state.all.find((x) => x.id === state.sel);
-  if (!m) return;
-  flash(kind === "word" ? "Making your Word file…" : "Preparing…", 120000);
+async function shareSelected(how) {
+  const ms = selMetas();
+  if (!ms.length) return;
+  const word = how === "word";
+  flash(word ? "Making your Word file…" : "Preparing…", 120000);
   try {
-    const rec = await getBlob(m.id);
-    if (!rec) throw new Error("missing file");
     const x = await loadExport();
-    const base = x.safeName(stripExt(m.name));
-
-    let result;
-    if (kind === "pdf") {
-      result = await x.shareFile(rec.blob, `${base}.pdf`, "application/pdf", base);
-    } else {
-      const pages = await x.textOfBlob(pdfjsLib, rec.blob);
-      if (!pages.some((p) => p.length)) {
-        flash("No text found in this PDF", 2600);
-        return;
+    const items = [];
+    let skipped = 0;
+    for (const m of ms) {
+      const rec = await getBlob(m.id);
+      if (!rec) throw new Error("missing file");
+      const base = x.safeName(stripExt(m.name));
+      if (word) {
+        const pages = await x.textOfBlob(pdfjsLib, rec.blob);
+        if (!pages.some((p) => p.length)) {
+          skipped++;
+          continue;
+        }
+        items.push({ blob: x.buildDocx(pages), filename: `${base}.docx`, mime: x.DOCX_MIME });
+      } else {
+        const kind = kindOf(m);
+        items.push({ blob: rec.blob, filename: `${base}${EXT[kind]}`, mime: MIME[kind] });
       }
-      result = await x.shareFile(x.buildDocx(pages), `${base}.docx`, x.DOCX_MIME, base);
     }
-    if (result === "shared") state.sel = null;
+    if (!items.length) {
+      flash(ms.length > 1 ? "No text found in these PDFs" : "No text found in this PDF", 2600);
+      return;
+    }
+    const title = items.length === 1 ? items[0].filename.replace(/\.\w+$/, "") : "Documents";
+    const result = await x.shareFiles(items, title);
+    if (result === "shared") state.sel.clear();
     markSel();
-    flash(result === "shared" ? "Shared" : "Cancelled");
+    flash(result === "shared" ? (skipped ? `Shared · ${skipped} had no text` : "Shared") : "Cancelled");
   } catch (err) {
     console.warn("share failed", err);
     flash("Couldn't share that", 2400);
@@ -439,12 +571,12 @@ async function shareSelected(kind) {
 
 els.archiveChip.addEventListener("click", () => {
   state.view = "archive";
-  state.sel = null;
+  state.sel.clear();
   refreshHome();
 });
 els.bBack.addEventListener("click", () => {
   state.view = "recent";
-  state.sel = null;
+  state.sel.clear();
   refreshHome();
 });
 
@@ -457,7 +589,7 @@ if (window.visualViewport) {
 }
 
 /* ------------------------------------------------------------------ *
- *  Getting a PDF in: file picker, library, "Open with"
+ *  Getting a document in: file picker, library, "Open with"
  * ------------------------------------------------------------------ */
 
 async function openBlob(blob, name, id) {
@@ -471,7 +603,7 @@ async function openBlob(blob, name, id) {
     id,
     name,
     blob,
-    meta: { ...(meta || { page: 1, idx: 0, frac: 0, zoom: 1, total: 0 }), id, name, size: blob.size, archived: false },
+    meta: { ...(meta || { page: 1, idx: 0, frac: 0, zoom: 1, total: 0, pct: 0 }), id, name, size: blob.size, archived: false },
     persist: true,
   });
 }
@@ -501,11 +633,13 @@ function nameFromUri(uri) {
   } catch {
     /* keep raw */
   }
-  const last = decoded.split("?")[0].split("/").pop() || "";
-  if (/\.pdf$/i.test(last)) return last;
+  const last = (decoded.split("?")[0].split("/").pop() || "").split(":").pop();
+  if (/\.[A-Za-z0-9]{1,5}$/.test(last)) return last;
   // some apps share a link with no file name in it
   const d = new Date();
-  return `PDF ${d.toLocaleDateString(undefined, { day: "numeric", month: "short" })} ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `Document ${d.getDate()} ${d.toLocaleDateString("en", { month: "short" })} ${hh}${mm}`;
 }
 
 let lastExternal = { url: "", at: 0 };
@@ -529,66 +663,36 @@ async function openFromUrl(url) {
   }
 }
 
+// Apps often hand over a file with no useful name or type, so look at the bytes.
+async function detectKind(blob, name, known) {
+  if (known) return known;
+  const unsupported = () => Object.assign(new Error("unsupported"), { name: "Unsupported" });
+  const head = new Uint8Array(await blob.slice(0, 1100).arrayBuffer());
+  const at = String.fromCharCode(...head).indexOf("%PDF-");
+  if (at === 0 || (at > 0 && /\.pdf$/i.test(name))) return "pdf";
+  if (head[0] === 0x50 && head[1] === 0x4b) return "docx"; // a zip; the Word reader checks it
+  if (head[0] === 0xd0 && head[1] === 0xcf) throw unsupported(); // old .doc
+  if (/\.pdf$/i.test(name)) return "pdf"; // let PDF.js say what is wrong with it
+  const utf16 = (head[0] === 0xff && head[1] === 0xfe) || (head[0] === 0xfe && head[1] === 0xff);
+  if (!utf16 && head.includes(0)) throw unsupported(); // binary of some other kind
+  return "txt";
+}
+
 /* ------------------------------------------------------------------ *
  *  Opening + closing a document
  * ------------------------------------------------------------------ */
 
 async function openDocument({ id, name, blob, meta, persist }) {
   busy("Opening…");
+  hideToast();
   closeDocument();
   const gen = ++state.gen;
 
   try {
-    const data = new Uint8Array(await blob.arrayBuffer());
-    const task = pdfjsLib.getDocument({ data, ...PDF_OPTIONS });
-    task.onPassword = (update, reason) => {
-      const pw = window.prompt(
-        reason === pdfjsLib.PasswordResponses.INCORRECT_PASSWORD
-          ? "Wrong password. Try again:"
-          : "This PDF is protected. Enter the password:"
-      );
-      if (pw === null) task.destroy();
-      else update(pw);
-    };
-    const pdf = await task.promise;
-    if (gen !== state.gen) {
-      pdf.destroy();
-      return;
-    }
-
-    const first = await pdf.getPage(1);
-    const vp = first.getViewport({ scale: 1 });
-    const ratio = vp.height / vp.width;
-
-    state.pdf = pdf;
-    state.id = id;
-    state.meta = { ...meta, id, name, total: pdf.numPages, openedAt: Date.now() };
-    state.zoom = clamp(meta.zoom || 1, MIN_ZOOM, MAX_ZOOM);
-    state.zgen++;
-
-    const frag = document.createDocumentFragment();
-    state.pages = [];
-    for (let n = 1; n <= pdf.numPages; n++) {
-      const el = document.createElement("div");
-      el.className = "page";
-      frag.append(el);
-      state.pages.push({ n, el, ratio, w: 0, h: 0, top: 0, canvas: null, task: null, busy: false, wanted: false, zgen: -1 });
-    }
-    els.pages.replaceChildren(frag);
-    els.title.textContent = stripExt(name);
-
-    els.home.hidden = true;
-    els.reader.hidden = false;
-    applyNight(state.night);
-
-    layout();
-    // resume where the reader left off, leaving room so nothing hides under the top bar
-    const start = { idx: clamp(meta.idx || 0, 0, pdf.numPages - 1), frac: meta.frac || 0 };
-    if (start.idx === 0 && start.frac <= 0) els.scroller.scrollTop = 0;
-    else scrollToAnchor(start, els.bar.offsetHeight + 4);
-    setChrome(true);
-    updateVisible();
-    loadSizes(gen);
+    const kind = await detectKind(blob, name, meta.kind);
+    name = withExt(name, kind);
+    const ok = kind === "pdf" ? await showPdf(gen, id, name, blob, meta) : await showTextDoc(gen, kind, id, name, blob, meta);
+    if (!ok || gen !== state.gen) return;
 
     if (persist) {
       await putBoth(state.meta, blob);
@@ -600,15 +704,98 @@ async function openDocument({ id, name, blob, meta, persist }) {
     if (gen === state.gen) {
       closeDocument();
       showHome();
-      if (!(err && err.name === "PasswordException")) toast("Couldn't open this PDF.");
+      if (err && err.name === "PasswordException") return; // they cancelled the password box
+      toast(err && err.name === "Unsupported" ? "Reader opens PDF, Word (.docx) and text files." : "Couldn't open this file.");
     }
   } finally {
     els.loading.hidden = true;
   }
 }
 
+async function showPdf(gen, id, name, blob, meta) {
+  const data = new Uint8Array(await blob.arrayBuffer());
+  const task = pdfjsLib.getDocument({ data, ...PDF_OPTIONS });
+  task.onPassword = (update, reason) => {
+    const pw = window.prompt(
+      reason === pdfjsLib.PasswordResponses.INCORRECT_PASSWORD
+        ? "Wrong password. Try again:"
+        : "This PDF is protected. Enter the password:"
+    );
+    if (pw === null) task.destroy();
+    else update(pw);
+  };
+  const pdf = await task.promise;
+  if (gen !== state.gen) {
+    pdf.destroy();
+    return false;
+  }
+
+  const first = await pdf.getPage(1);
+  const vp = first.getViewport({ scale: 1 });
+  const ratio = vp.height / vp.width;
+
+  state.pdf = pdf;
+  state.open = true;
+  state.kind = "pdf";
+  state.id = id;
+  state.meta = { ...meta, id, name, kind: "pdf", total: pdf.numPages, openedAt: Date.now() };
+  state.zoom = clamp(meta.zoom || 1, MIN_ZOOM, MAX_ZOOM);
+  state.zgen++;
+
+  const frag = document.createDocumentFragment();
+  state.pages = [];
+  for (let n = 1; n <= pdf.numPages; n++) {
+    const el = document.createElement("div");
+    el.className = "page";
+    frag.append(el);
+    state.pages.push({ n, el, ratio, w: 0, h: 0, top: 0, canvas: null, task: null, busy: false, wanted: false, zgen: -1 });
+  }
+  els.pages.replaceChildren(frag);
+  els.title.textContent = stripExt(name);
+
+  els.home.hidden = true;
+  els.reader.hidden = false;
+  applyNight(state.night);
+
+  layout();
+  // resume where the reader left off, leaving room so nothing hides under the top bar
+  const start = { idx: clamp(meta.idx || 0, 0, pdf.numPages - 1), frac: meta.frac || 0 };
+  if (start.idx === 0 && start.frac <= 0) els.scroller.scrollTop = 0;
+  else scrollToAnchor(start, els.bar.offsetHeight + 4);
+  setChrome(true);
+  updateVisible();
+  loadSizes(gen);
+  return true;
+}
+
+// Word and text files open straight into the reflowing text view.
+async function showTextDoc(gen, kind, id, name, blob, meta) {
+  const x = await loadDocs();
+  const paras = kind === "docx" ? await x.readDocx(blob) : await x.readText(blob);
+  if (gen !== state.gen) return false;
+
+  state.open = true;
+  state.kind = kind;
+  state.id = id;
+  state.meta = { ...meta, id, name, kind, total: 0, openedAt: Date.now() };
+  state.textPages = [paras];
+  renderText(state.textPages, kind === "docx" ? "This Word document has no text." : "This file is empty.");
+  els.title.textContent = stripExt(name);
+
+  els.home.hidden = true;
+  els.reader.hidden = false;
+  els.reader.classList.add("textdoc");
+  applyNight(state.night);
+  setTextView(true);
+
+  const max = els.textView.scrollHeight - els.textView.clientHeight;
+  els.textView.scrollTop = max > 0 ? clamp(meta.pct || 0, 0, 1) * max : 0;
+  setChrome(true);
+  return true;
+}
+
 function closeDocument() {
-  if (state.pdf) saveProgress(true);
+  if (state.open) saveProgress(true);
   state.gen++;
   state.queue = [];
   for (const p of state.pages) if (p.task) p.task.cancel();
@@ -616,7 +803,10 @@ function closeDocument() {
   state.pdf = null;
   state.pages = [];
   state.id = null;
+  state.open = false;
+  state.kind = null;
   state.textPages = null;
+  els.reader.classList.remove("textdoc");
   setTextView(false);
   els.textView.replaceChildren();
   els.pages.replaceChildren();
@@ -852,18 +1042,36 @@ els.scroller.addEventListener(
   },
   { passive: true }
 );
-els.textView.addEventListener("scroll", onReadScroll, { passive: true });
+els.textView.addEventListener(
+  "scroll",
+  () => {
+    onReadScroll();
+    // Word and text files remember how far you read; PDFs in Text view do not
+    if (state.open && state.kind !== "pdf") {
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => saveProgress(false), 500);
+    }
+  },
+  { passive: true }
+);
 
 function saveProgress(now) {
-  if (!state.pdf || !state.meta || !state.pages.length || state.text) return;
-  const a = getAnchor(0);
-  Object.assign(state.meta, {
-    idx: a.idx,
-    frac: clamp(a.frac, 0, 1),
-    page: findPage(els.scroller.scrollTop + els.scroller.clientHeight * 0.35) + 1,
-    zoom: state.zoom,
-    openedAt: Date.now(),
-  });
+  if (!state.open || !state.meta) return;
+  if (state.kind === "pdf") {
+    if (!state.pdf || !state.pages.length || state.text) return;
+    const a = getAnchor(0);
+    Object.assign(state.meta, {
+      idx: a.idx,
+      frac: clamp(a.frac, 0, 1),
+      page: findPage(els.scroller.scrollTop + els.scroller.clientHeight * 0.35) + 1,
+      zoom: state.zoom,
+      openedAt: Date.now(),
+    });
+  } else {
+    const tv = els.textView;
+    const max = tv.scrollHeight - tv.clientHeight;
+    Object.assign(state.meta, { pct: max > 0 ? clamp(tv.scrollTop / max, 0, 1) : 0, openedAt: Date.now() });
+  }
   const p = putMeta({ ...state.meta });
   if (!now) p.catch(() => {});
 }
@@ -1010,7 +1218,8 @@ function setTextView(on) {
   els.textBtn.setAttribute("aria-pressed", String(on));
 }
 
-function renderText(pages) {
+// pages: one list of paragraphs per page. A paragraph is a string, or { h, t } for a heading.
+function renderText(pages, emptyMsg) {
   const frag = document.createDocumentFragment();
   let first = true;
   pages.forEach((paras, i) => {
@@ -1023,14 +1232,15 @@ function renderText(pages) {
     }
     first = false;
     for (const t of paras) {
-      const p = document.createElement("p");
-      p.textContent = t;
+      const heading = typeof t === "object";
+      const p = document.createElement(heading ? (t.h === 1 ? "h2" : "h3") : "p");
+      p.textContent = heading ? t.t : t;
       frag.append(p);
     }
   });
   if (first) {
     const p = document.createElement("p");
-    p.textContent = "No selectable text in this PDF. It may be a scan.";
+    p.textContent = emptyMsg;
     frag.append(p);
   }
   els.textView.replaceChildren(frag);
@@ -1055,7 +1265,7 @@ els.textBtn.addEventListener("click", async () => {
       const pages = await x.extractText(state.pdf, () => gen !== state.gen);
       if (gen !== state.gen) return;
       state.textPages = pages;
-      renderText(pages);
+      renderText(pages, "No selectable text in this PDF. It may be a scan.");
     } catch (err) {
       console.warn("text view failed", err);
       if (gen === state.gen) toast("Couldn't read the text.");
@@ -1104,16 +1314,16 @@ const capApp = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.
 if (capApp && capApp.addListener) {
   capApp.addListener("backButton", () => {
     if (!els.sheet.hidden) closeSheet();
-    else if (state.pdf) goHome();
-    else if (["share", "rename", "confirm"].includes(state.mode)) setMode(state.mode === "share" ? "select" : defaultMode());
-    else if (state.sel) toggleSelect(state.sel);
+    else if (state.open) goHome();
+    else if (["share", "rename", "confirm"].includes(state.mode)) setMode(defaultMode());
+    else if (state.sel.size) clearSel();
     else if (state.view === "archive") els.bBack.click();
     else capApp.exitApp();
   });
 
-  // app already running when a PDF is opened with Reader
+  // app already running when a file is opened with Reader
   capApp.addListener("appUrlOpen", (e) => openFromUrl(e && e.url));
-  // app was closed: it was started by the PDF itself
+  // app was closed: it was started by the file itself
   if (capApp.getLaunchUrl) {
     capApp
       .getLaunchUrl()

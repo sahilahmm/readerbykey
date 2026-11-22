@@ -14,18 +14,20 @@ Open that link on your phone, then install the file. Android asks you to allow i
 
 ## What it does
 
-- **One pill, one hand.** The button at the bottom is "Open a PDF" until you have files, then it splits into **+** and **×**. Select a file and it becomes **Share / Rename / Archive**. Confirmations and "done" messages appear inside the same pill.
+- **One pill, one hand.** The button at the bottom is "Open Document" until you have files, then it splits into **+** and **×**. Select a file and it becomes **Share / Rename / Archive**. Confirmations and "done" messages appear inside the same pill.
 - Recent files sit right above the pill, newest closest to your thumb. Long-press a file (or tap its circle) to select it.
-- **Share** as PDF, or as Word (text only, no pictures or layout).
+- **Open Document** takes PDF, Word (.docx) and text (.txt) files. Word and text files open straight into the reflowing text view and remember how far you read.
+- **Select several files** (tap the circles, or Select all) to share, archive or remove them together. **Undo** appears after archive, restore, remove and rename.
+- **Share** a PDF as PDF or as Word (text only, no pictures or layout). Word and text files are shared as they are.
 - **Archive** keeps a file without crowding Recent. Open the Archive chip at the top to find or restore it.
 - **Text view** (the lines icon in the reader) shows the same document as plain text that reflows to your screen. The − and + buttons change the text size there.
 - Smooth scrolling, pinch zoom, go to page, night pages, password-protected PDFs.
-- Appears in Android's **Open with** list for PDFs (WhatsApp, Files, browsers).
+- Appears in Android's **Open with** list for PDF, Word and text files (WhatsApp, Files, browsers).
 - Remembers the page and zoom for each file.
 - Works fully offline. Your files never leave your phone unless you share them.
 - Look: Creamy Latte and Mocha Bean, blue accent in light mode, true black with cream in dark mode.
 
-Text view and Word sharing need a PDF with real text. A scanned PDF (photos of pages) has none, and Reader says so.
+Text view and sharing a PDF as Word need a PDF with real text. A scanned PDF (photos of pages) has none, and Reader says so.
 
 ## How it is built
 

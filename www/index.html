@@ -25,6 +25,7 @@
 
   <!-- HOME -->
   <main id="home" class="screen">
+    <button id="allChip" class="chip" type="button" hidden>Select all</button>
     <button id="archiveChip" class="chip" type="button" hidden></button>
     <h1 id="greeting"></h1>
 
@@ -32,13 +33,14 @@
     <p id="empty" class="empty">Nothing here yet</p>
 
     <nav id="dock" class="dock" aria-live="polite">
-      <div class="seg" data-s="open"><button id="bOpen" type="button"><svg class="ic" viewBox="0 0 24 24"><use href="#i-plus"/></svg><span>Open a PDF</span></button></div>
-      <div class="seg" data-s="add"><button id="bAdd" type="button" aria-label="Open another PDF"><svg class="ic" viewBox="0 0 24 24"><use href="#i-plus"/></svg></button></div>
+      <div class="seg" data-s="open"><button id="bOpen" type="button"><svg class="ic" viewBox="0 0 24 24"><use href="#i-plus"/></svg><span>Open Document</span></button></div>
+      <div class="seg" data-s="add"><button id="bAdd" type="button" aria-label="Open another document"><svg class="ic" viewBox="0 0 24 24"><use href="#i-plus"/></svg></button></div>
       <div class="seg" data-s="remove"><button id="bRemove" type="button" aria-label="Remove last file"><svg class="ic" viewBox="0 0 24 24"><use href="#i-x"/></svg></button></div>
 
       <div class="seg" data-s="share"><button id="bShare" type="button"><svg class="ic" viewBox="0 0 24 24"><use href="#i-share"/></svg><span>Share</span></button></div>
       <div class="seg" data-s="rename"><button id="bRename" type="button"><svg class="ic" viewBox="0 0 24 24"><use href="#i-edit"/></svg><span>Rename</span></button></div>
       <div class="seg" data-s="archive"><button id="bArchive" type="button"><svg class="ic" viewBox="0 0 24 24"><use href="#i-archive"/></svg><span id="archiveLabel">Archive</span></button></div>
+      <div class="seg" data-s="delete"><button id="bDelete" type="button"><svg class="ic" viewBox="0 0 24 24"><use href="#i-x"/></svg><span>Remove</span></button></div>
 
       <div class="seg" data-s="pdf"><button id="bPdf" type="button"><span>PDF</span></button></div>
       <div class="seg" data-s="word"><button id="bWord" type="button"><span>Word</span></button></div>
@@ -50,7 +52,7 @@
       <div class="seg" data-s="back"><button id="bBack" type="button"><svg class="ic" viewBox="0 0 24 24"><use href="#i-back"/></svg><span>Recent</span></button></div>
     </nav>
 
-    <input id="fileInput" type="file" accept="application/pdf,.pdf" hidden />
+    <input id="fileInput" type="file" accept="application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,text/plain,.txt" hidden />
   </main>
 
   <!-- READER -->
@@ -82,7 +84,7 @@
   </div>
 
   <div id="loading" class="loading" hidden>Opening…</div>
-  <div id="toast" class="toast" role="status" hidden></div>
+  <div id="toast" class="toast" role="status" hidden><span id="toastMsg"></span><button id="toastUndo" type="button" hidden>Undo</button></div>
 
   <script type="module" src="app.js"></script>
 </body>

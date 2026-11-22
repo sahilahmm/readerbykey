@@ -53,11 +53,15 @@ styles = styles.replace(
 );
 writeFileSync(stylesPath, styles);
 
-// 5. "Open with": make Reader show up when you tap a PDF in WhatsApp, Files, a browser, etc.
+// 5. "Open with": make Reader show up when you tap a PDF, Word (.docx) or text file in
+//    WhatsApp, Files, a browser, etc.
 const manifestPath = join(root, "android", "app", "src", "main", "AndroidManifest.xml");
 let manifest = readFileSync(manifestPath, "utf8");
 if (!manifest.includes("android:mimeType=\"application/pdf\"")) {
-  const pdfFilter = `
+  const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+  // Filter A: the sending app labels the file with the right type.
+  const byType = `
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -65,10 +69,33 @@ if (!manifest.includes("android:mimeType=\"application/pdf\"")) {
                 <data android:scheme="content" />
                 <data android:scheme="file" />
                 <data android:mimeType="application/pdf" />
+                <data android:mimeType="${DOCX}" />
+                <data android:mimeType="text/plain" />
             </intent-filter>
 `;
+
+  // Filter B: the app sends a generic type (or none), but the file name ends in .pdf/.docx/.txt.
+  // Android only reads path patterns when a host is given, and `.*` stops at dots, so there
+  // is one pattern per number of dots in the name.
+  const pattern = (ext, dots) => ".*" + "\\\\..*".repeat(dots) + "\\\\." + ext;
+  const patterns = ["pdf", "docx", "txt"]
+    .flatMap((ext) => [0, 1, 2, 3].map((n) => `                <data android:pathPattern="${pattern(ext, n)}" />`))
+    .join("\n");
+  const byName = `
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:host="*" />
+                <data android:mimeType="*/*" />
+${patterns}
+            </intent-filter>
+`;
+
   if (!manifest.includes("</activity>")) throw new Error("Activity not found in AndroidManifest.xml");
-  manifest = manifest.replace("</activity>", `${pdfFilter}\n        </activity>`);
+  manifest = manifest.replace("</activity>", `${byType}${byName}\n        </activity>`);
   // the on-screen keyboard resizes the page, so the pill rises above it while renaming
   if (!manifest.includes("windowSoftInputMode")) {
     manifest = manifest.replace('android:launchMode="singleTask"', 'android:launchMode="singleTask"\n            android:windowSoftInputMode="adjustResize"');

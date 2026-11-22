@@ -1,9 +1,8 @@
-### What's new in 1.0.2.5
+### What's new in 1.0.2.6
 
-- New home screen: one pill at the bottom for one-handed use. It starts as **Open a PDF**, then becomes **+** and **×** once you have files.
-- Your recent files sit right above the pill, newest closest to your thumb.
-- Select a file (long-press or tap the circle) for **Share**, **Rename** and **Archive**. Archived files live under the Archive chip and can be restored.
-- Share a file as **PDF** or **Word** (text only).
-- New **Text view** in the reader: the same document as plain, resizable text.
-- Reader appears in Android's **Open with** list for PDFs.
-- Rounder, calmer look everywhere.
+- **Open Document**: the home button now opens Word (.docx) and text (.txt) files as well as PDFs. They open straight into the reflowing text view, and Night and text size work there too. Your place is remembered.
+- **Open with** now lists Reader for Word and text files, not only PDFs. It also recognises files that other apps send without a proper name or type.
+- **Select several files**: tap the circles to pick more than one, or use **Select all** at the top left. Share, Archive/Restore and Remove work on everything you picked.
+- **Undo** appears in the toast after Archive, Restore, Remove and Rename.
+- Share keeps Word and text files as they are; PDFs can still go out as PDF or Word.
+- The toast now sits just above the pill.
