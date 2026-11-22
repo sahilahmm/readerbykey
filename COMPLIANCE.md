@@ -36,3 +36,14 @@ This is a checklist of what the project does and what still needs you. It is an 
 
 ## Security support commitment
 Security fixes are shipped as new releases on the GitHub Releases page. Critical issues are fixed as fast as one person can. Installed copies do not update by themselves outside Google Play, so users should check the releases page.
+
+## Apple App Store (iOS build)
+| Requirement | Status |
+|---|---|
+| Privacy manifest (`PrivacyInfo.xcprivacy`) | Done: no tracking, no collected data, required-reason APIs declared |
+| App Privacy label | "Data Not Collected" (see `store/APPLE.md`) |
+| Export compliance | `ITSAppUsesNonExemptEncryption` = false |
+| App Transport Security | Default strict (no exceptions) and the app has no network code |
+| Document types | PDF, Word, text registered as Viewer |
+| Minimum iOS | 15 |
+| Signing, TestFlight, App Store review | Only you can do this: paid Apple Developer account, then sign and upload from a Mac |

@@ -1,6 +1,6 @@
 # Reader by Key
 
-A simple PDF reader for Android. Open a PDF, read it, and it remembers where you stopped.
+A simple PDF reader for Android and iOS. Open a PDF, read it, and it remembers where you stopped.
 
 On your phone the app is called **Reader**. "Reader by Key" is only the project name (this repo, the release page, the APK file).
 
@@ -80,6 +80,15 @@ Keep `reader-release.jks` safe and never commit it. If you lose it you cannot up
 
 - Name on the phone: `appName` in `capacitor.config.json` (`Reader`).
 - App id: `com.keybysah.reader`. Changing it later makes Android treat it as a different app.
+
+## iPhone and iPad
+
+Every release also gets `Reader-by-Key-unsigned.ipa`, built on a macOS runner from the same web code (Capacitor iOS, bundle id `com.keybysah.reader`, shows as **Reader**). It is **unsigned**, because Apple only allows installing signed apps:
+
+- **Free, on your own iPhone:** sideload it with a tool such as AltStore or Sideloadly and your Apple ID. The certificate lasts 7 days, then you re-sign.
+- **Properly:** join the Apple Developer Program (paid), sign it in Xcode, and ship through TestFlight or the App Store. Answers for the forms are in `store/APPLE.md`.
+
+The iOS version number keeps three parts (`1.3.5`) because Apple does not allow a fourth. This build has not been run on a real iPhone yet, so treat it as a first test.
 
 ## Google Play and EU
 

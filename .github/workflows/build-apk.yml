@@ -187,3 +187,56 @@ jobs:
             --notes-file "$RUNNER_TEMP/notes.md" \
             --target "$GITHUB_SHA" \
             --latest
+
+  ios:
+    # Runs after the Android release exists and adds an iOS build to it. If this job fails,
+    # the Android release is not affected.
+    needs: release
+    runs-on: macos-latest
+    timeout-minutes: 40
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Read the version
+        run: echo "VERSION_NAME=$(tr -d '[:space:]' < VERSION)" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Copy PDF.js into the app
+        run: npm run prepare:web
+
+      - name: Generate the iOS project
+        run: npx cap add ios
+
+      - name: Apply icon, launch screen, file types, privacy manifest and version
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+        run: |
+          node scripts/patch-ios.mjs
+          npx cap sync ios
+
+      - name: Build the app (unsigned)
+        run: |
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/Reader.xcarchive" \
+            -skipPackagePluginValidation -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            archive | tail -n 30
+          mkdir -p dist/Payload
+          cp -R "$RUNNER_TEMP/Reader.xcarchive/Products/Applications/App.app" dist/Payload/
+          (cd dist && zip -qr Reader-by-Key-unsigned.ipa Payload && rm -rf Payload && shasum -a 256 Reader-by-Key-unsigned.ipa > Reader-by-Key-unsigned.ipa.sha256)
+          ls -la dist
+
+      - name: Add to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "v$VERSION_NAME" dist/Reader-by-Key-unsigned.ipa dist/Reader-by-Key-unsigned.ipa.sha256 --clobber
