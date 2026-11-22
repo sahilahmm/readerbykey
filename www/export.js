@@ -37,6 +37,15 @@ function toParagraphs(items) {
     else lines.push({ y, h, text: it.str });
   }
 
+  // typical line height on this page; clearly bigger, short lines are headings
+  const hs = lines.map((l) => l.h).filter((h) => h > 0).sort((a, b) => a - b);
+  const median = hs.length ? hs[Math.floor(hs.length / 2)] : 10;
+  const headingOf = (l) => {
+    const t = l.text.replace(/\s+/g, " ").trim();
+    if (!t || t.length > 120 || l.h < median * 1.25) return 0;
+    return l.h >= median * 1.6 ? 1 : 2;
+  };
+
   // 2) group lines into paragraphs: a big gap (or a jump back up, e.g. next column) starts a new one
   const paras = [];
   let cur = "";
@@ -44,8 +53,20 @@ function toParagraphs(items) {
   for (const line of lines) {
     const text = line.text.replace(/\s+/g, " ").trim();
     if (!text) continue;
+    const hl = headingOf(line);
+    if (hl || prev?.heading) {
+      if (cur) paras.push(cur);
+      cur = "";
+      if (hl) {
+        const last = paras[paras.length - 1];
+        if (last && typeof last === "object" && last.h === hl && prev?.heading) last.t += " " + text; // wrapped title
+        else paras.push({ h: hl, t: text });
+        prev = { ...line, heading: true };
+        continue;
+      }
+    }
     const gap = prev ? prev.y - line.y : 0;
-    if (prev && (gap > Math.max(prev.h, line.h) * 1.8 || gap < 0)) {
+    if (prev && cur && (gap > Math.max(prev.h, line.h) * 1.8 || gap < 0)) {
       paras.push(cur);
       cur = text;
     } else if (!cur) {
@@ -73,11 +94,29 @@ const esc = (s) =>
 
 export const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
-export function buildDocx(pages) {
+const NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
+
+const STYLES =
+  XML_HEAD +
+  `<w:styles ${NS}>` +
+  '<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:eastAsia="Calibri" w:cs="Calibri"/><w:sz w:val="22"/><w:szCs w:val="22"/><w:lang w:val="en-US"/></w:rPr></w:rPrDefault>' +
+  '<w:pPrDefault><w:pPr><w:spacing w:after="160" w:line="276" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>' +
+  '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style>' +
+  '<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="360" w:after="120"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:b/><w:sz w:val="36"/><w:szCs w:val="36"/></w:rPr></w:style>' +
+  '<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="280" w:after="100"/><w:outlineLvl w:val="1"/></w:pPr><w:rPr><w:b/><w:sz w:val="28"/><w:szCs w:val="28"/></w:rPr></w:style>' +
+  "</w:styles>";
+
+// pages: one array of paragraphs per page; a paragraph is a string or { h: 1|2, t }
+export function buildDocx(pages, title = "Document") {
   const body = pages
     .flat()
-    .map((p) => `<w:p><w:r><w:t xml:space="preserve">${esc(p)}</w:t></w:r></w:p>`)
+    .map((p) =>
+      typeof p === "object"
+        ? `<w:p><w:pPr><w:pStyle w:val="Heading${p.h === 1 ? 1 : 2}"/></w:pPr><w:r><w:t xml:space="preserve">${esc(p.t)}</w:t></w:r></w:p>`
+        : `<w:p><w:r><w:t xml:space="preserve">${esc(p)}</w:t></w:r></w:p>`
+    )
     .join("");
+  const now = new Date().toISOString().replace(/\.\d+Z$/, "Z");
 
   const files = {
     "[Content_Types].xml":
@@ -86,17 +125,37 @@ export function buildDocx(pages) {
       '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
       '<Default Extension="xml" ContentType="application/xml"/>' +
       '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
+      '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>' +
+      '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>' +
+      '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>' +
       "</Types>",
     "_rels/.rels":
       XML_HEAD +
       '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
       '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>' +
+      '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>' +
+      '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>' +
       "</Relationships>",
+    "word/_rels/document.xml.rels":
+      XML_HEAD +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
+      "</Relationships>",
+    "word/styles.xml": STYLES,
     "word/document.xml":
       XML_HEAD +
-      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>' +
+      `<w:document ${NS}><w:body>` +
       body +
+      '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>' +
       "</w:body></w:document>",
+    "docProps/core.xml":
+      XML_HEAD +
+      '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">' +
+      `<dc:title>${esc(title)}</dc:title><dc:creator>Reader by Key</dc:creator>` +
+      `<dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified>` +
+      "</cp:coreProperties>",
+    "docProps/app.xml":
+      XML_HEAD + '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>Reader by Key</Application></Properties>',
   };
   return zip(files);
 }

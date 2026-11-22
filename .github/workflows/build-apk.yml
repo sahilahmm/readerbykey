@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write # needed to publish the GitHub Release
+  contents: read # jobs ask for more only where they need it
 
 concurrency:
   group: build-apk
@@ -19,6 +19,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write # for the build attestation
+      attestations: write
 
     steps:
       - uses: actions/checkout@v4
@@ -45,7 +49,11 @@ jobs:
         run: echo "VERSION_NAME=$(tr -d '[:space:]' < VERSION)" >> "$GITHUB_ENV"
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts # install scripts of dependencies never run
+
+      - name: Check dependencies for known problems
+        run: npm audit --audit-level=high
+        continue-on-error: true
 
       - name: Copy PDF.js into the app
         run: npm run prepare:web
@@ -83,40 +91,86 @@ jobs:
               --out "../dist/$APK_NAME" "$RUNNER_TEMP/aligned.apk"
             "$BT/apksigner" verify --print-certs "../dist/$APK_NAME"
             rm -f "$RUNNER_TEMP/release.jks"
-            echo "SIGNING=release" >> "$GITHUB_ENV"
+            echo release > ../dist/signing.txt
           else
-            # No key set up yet: build with a temporary debug key so it still works.
-            ./gradlew --no-daemon assembleDebug
-            cp app/build/outputs/apk/debug/app-debug.apk "../dist/$APK_NAME"
-            echo "SIGNING=debug" >> "$GITHUB_ENV"
+            # No permanent key yet: sign with a throwaway key made for this build. The app is still a
+            # normal (non-debuggable) release build, but Android can't update an older install with it.
+            ./gradlew --no-daemon assembleRelease
+            keytool -genkeypair -alias reader -keyalg RSA -keysize 3072 -validity 3650 \
+              -dname "CN=Reader by Key, O=Key by Sah, C=BD" \
+              -keystore "$RUNNER_TEMP/temp.jks" -storetype PKCS12 \
+              -storepass temporary-build-key -keypass temporary-build-key
+            BT="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+            "$BT/zipalign" -p -f 4 app/build/outputs/apk/release/app-release-unsigned.apk "$RUNNER_TEMP/aligned.apk"
+            "$BT/apksigner" sign \
+              --ks "$RUNNER_TEMP/temp.jks" \
+              --ks-key-alias reader \
+              --ks-pass pass:temporary-build-key \
+              --key-pass pass:temporary-build-key \
+              --out "../dist/$APK_NAME" "$RUNNER_TEMP/aligned.apk"
+            "$BT/apksigner" verify --print-certs "../dist/$APK_NAME"
+            rm -f "$RUNNER_TEMP/temp.jks"
+            echo temporary > ../dist/signing.txt
           fi
+
+      - name: Checksum and signer fingerprint
+        run: |
+          cd dist
+          sha256sum "$APK_NAME" > "$APK_NAME.sha256"
+          BT="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          "$BT/apksigner" verify --print-certs "$APK_NAME" | grep -i "SHA-256 digest" | head -1 > signer.txt || true
+          cat "$APK_NAME.sha256" signer.txt
+
+      - name: Attest where this APK came from
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/${{ env.APK_NAME }}
 
       - uses: actions/upload-artifact@v4
         with:
           name: Reader-by-Key-apk
-          path: dist/${{ env.APK_NAME }}
+          path: dist/
           retention-days: 14
 
+  release:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # the only job that can publish
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: Reader-by-Key-apk
+          path: dist
+
       - name: Publish release
-        if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          VERSION_NAME="$(tr -d '[:space:]' < VERSION)"
           TAG="v$VERSION_NAME"
-          if [ "$SIGNING" = "release" ]; then
-            INSTALL_NOTE="It installs as **Reader** and updates over the previous version."
-          else
-            INSTALL_NOTE="It installs as **Reader**. This build uses a temporary debug key, so uninstall any older Reader first (see README: permanent signing)."
-          fi
           {
-            echo "Download **$APK_NAME** below and open it on your Android phone. $INSTALL_NOTE"
+            echo "Download **$APK_NAME** below and open it on your Android phone. It installs as **Reader**."
+            if [ "$(cat dist/signing.txt)" = "temporary" ]; then
+              echo
+              echo "> This build is signed with a one-time key (no permanent key is set up yet), so uninstall any older Reader before installing. See the README, \"Permanent signing\"."
+            fi
             echo
             cat RELEASE_NOTES.md
+            echo
+            echo "### Verify this download"
+            echo "- SHA-256 of the APK: \`$(cut -d' ' -f1 dist/$APK_NAME.sha256)\`"
+            echo "- Signing certificate: \`$(sed 's/.*: //' dist/signer.txt)\`"
+            echo "- Built by GitHub Actions from this repository, with a build attestation (\`gh attestation verify $APK_NAME --repo sahilahmm/readerbykey\`)."
           } > "$RUNNER_TEMP/notes.md"
 
           gh release delete "$TAG" --cleanup-tag --yes || true
           gh release delete latest --cleanup-tag --yes || true   # the old rolling release, if it still exists
-          gh release create "$TAG" "dist/$APK_NAME" \
+          gh release create "$TAG" "dist/$APK_NAME" "dist/$APK_NAME.sha256" \
             --title "Reader by Key $VERSION_NAME" \
             --notes-file "$RUNNER_TEMP/notes.md" \
             --target "$GITHUB_SHA" \

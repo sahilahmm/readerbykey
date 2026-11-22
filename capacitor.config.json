@@ -3,12 +3,19 @@
   "appName": "Reader",
   "webDir": "www",
   "server": {
-    "androidScheme": "https"
+    "androidScheme": "https",
+    "cleartext": false
   },
   "plugins": {
     "SystemBars": {
       "insetsHandling": "css",
       "style": "DEFAULT"
     }
+  },
+  "loggingBehavior": "none",
+  "android": {
+    "allowMixedContent": false,
+    "webContentsDebuggingEnabled": false,
+    "backgroundColor": "#F3E9D7"
   }
 }

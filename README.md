@@ -14,17 +14,19 @@ Open that link on your phone, then install the file. Android asks you to allow i
 
 ## What it does
 
-- **One pill, one hand.** The button at the bottom is "Open Document" until you have files, then it splits into **+** and **×**. Select a file and it becomes **Share / Rename / Archive**. Confirmations and "done" messages appear inside the same pill.
+- **One pill, one hand.** The button at the bottom is "Open Document" until you have files, then it splits into **+** and **×**. Select a file and it becomes **Share / Rename / Archive**. Confirmations, "done" messages, Undo and password entry all appear inside the same pill.
 - Recent files sit right above the pill, newest closest to your thumb. Long-press a file (or tap its circle) to select it.
 - **Open Document** takes PDF, Word (.docx) and text (.txt) files. Word and text files open straight into the reflowing text view and remember how far you read.
 - **Select several files** (tap the circles, or Select all) to share, archive or remove them together. **Undo** appears after archive, restore, remove and rename.
 - **Share** a PDF as PDF or as Word (text only, no pictures or layout). Word and text files are shared as they are.
 - **Archive** keeps a file without crowding Recent. Open the Archive chip at the top to find or restore it.
 - **Text view** (the lines icon in the reader) shows the same document as plain text that reflows to your screen. The − and + buttons change the text size there.
-- Smooth scrolling, pinch zoom, go to page, night pages, password-protected PDFs.
+- Smooth scrolling, pinch zoom, go to page, night pages, password-protected PDFs (the password is typed into the pill).
+- **Word files** keep their look: bold/italic/underline, colours, headings, lists, tables, pictures and links. A PDF shared as Word gets real headings and an A4 page.
+- **Dark mode is your choice**: the moon/sun button at the top left. It ignores the phone's setting.
 - Appears in Android's **Open with** list for PDF, Word and text files (WhatsApp, Files, browsers).
 - Remembers the page and zoom for each file.
-- Works fully offline. Your files never leave your phone unless you share them.
+- Works fully offline with no internet permission. Your files never leave your phone unless you share them. See [SECURITY.md](SECURITY.md) and [PRIVACY.md](PRIVACY.md).
 - Look: Creamy Latte and Mocha Bean, blue accent in light mode, true black with cream in dark mode.
 
 Text view and sharing a PDF as Word need a PDF with real text. A scanned PDF (photos of pages) has none, and Reader says so.
@@ -38,7 +40,7 @@ Text view and sharing a PDF as Word need a PDF with real text. A scanned PDF (ph
 
 ### Releasing a new version
 
-1. Edit `www/`, and change the number in `VERSION` (for example `1.0.2.6`).
+1. Edit `www/`, and change the number in `VERSION` (for example `1.3`).
 2. Write what changed in `RELEASE_NOTES.md`.
 3. Commit and push to `main`. A few minutes later the release `v<VERSION>` is up with the APK.
 
@@ -56,7 +58,7 @@ Open the address it prints, then pick a PDF with the button.
 
 ## Permanent signing (so updates install over the old version)
 
-Without this, builds use a temporary debug key and Android will not let a new build replace the old one. You have to uninstall first, which also clears your Recent list.
+Without this, each build is signed with a one-time key and Android will not let a new build replace the old one. You have to uninstall first, which also clears your Recent list.
 
 One time setup:
 
@@ -78,3 +80,12 @@ Keep `reader-release.jks` safe and never commit it. If you lose it you cannot up
 
 - Name on the phone: `appName` in `capacitor.config.json` (`Reader`).
 - App id: `com.keybysah.reader`. Changing it later makes Android treat it as a different app.
+
+## Why Android may say "scan app" when you install
+
+That message comes from Google Play Protect, and Chrome may also warn about downloading an APK. It appears for any app installed from outside a store, and the app itself cannot turn it off. What helps:
+
+1. **Add the permanent key** (above). The publisher shown on the certificate is `Key by Sah`, the same on every release.
+2. Releases are release-mode builds, target the current Android version, and ask for no permissions.
+3. Check the SHA-256 and attestation on the release page (see SECURITY.md).
+4. **Android developer verification.** Google is rolling out a rule that apps on certified phones must come from a registered developer: from September 2026 in Brazil, Indonesia, Singapore and Thailand, and worldwide from 2027. There is a free limited-distribution account for students and hobbyists (no ID document or fee). Register the package name `com.keybysah.reader` together with your signing key at the Android Developer Console once it opens for you; keep the same key forever.

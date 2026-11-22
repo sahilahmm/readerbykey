@@ -16,6 +16,7 @@
   --seg: rgba(243, 233, 215, 0.16);
   --pill-bg: #7A553A;
   --pill-ink: #F3E9D7;
+  color-scheme: light;
 
   --top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
   --bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
@@ -31,8 +32,9 @@
   --card-in: calc(var(--card-r) - var(--card-pad)); /* 14px */
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
+@media all {
+  :root[data-theme="dark"] {
+    color-scheme: dark;
     --bg: #000000;
     --ink: #F3E9D7;
     --soft: #131211;
@@ -109,7 +111,10 @@ button { font: inherit; color: inherit; }
   font-weight: 600;
 }
 .chip:active { opacity: 0.8; }
-#allChip { right: auto; left: 16px; } /* "Select all" sits opposite the Archive chip */
+#allChip { right: auto; left: 64px; }
+#themeBtn { right: auto; left: 16px; width: 40px; padding: 0; display: grid; place-items: center; }
+.chip .ic { width: 20px; height: 20px; }
+.sprite { position: absolute; } /* "Select all" sits opposite the Archive chip */
 
 /* the list sits at the bottom, newest file closest to the thumb */
 .list {
@@ -242,7 +247,8 @@ button { font: inherit; color: inherit; }
   transition: flex-grow 0.42s cubic-bezier(0.3, 0.8, 0.2, 1), opacity 0.3s ease 0.1s, visibility 0s;
 }
 .seg[data-s="add"].on { flex-grow: 2; }
-.seg[data-s="msg"].on, .seg[data-s="input"].on { flex-grow: 5; }
+.seg[data-s="msg"].on, .seg[data-s="input"].on, .seg[data-s="pw"].on { flex-grow: 5; }
+.seg[data-s="undo"].on { flex-grow: 2; }
 
 .seg > button,
 .seg > input,
@@ -395,6 +401,15 @@ button { font: inherit; color: inherit; }
 /* Word and text files are already text: no Text view button, line breaks kept, Night applies */
 .textdoc #textBtn { display: none; }
 .textdoc .textview p { white-space: pre-line; }
+.textview a { color: var(--accent); text-decoration: underline; }
+.textview img { display: block; max-width: 100%; height: auto; margin: 12px auto; border-radius: 14px; }
+.textview p.li { position: relative; padding-left: calc(1.6em + var(--lv, 0) * 1.4em); }
+.textview p.li .lb { position: absolute; left: calc(var(--lv, 0) * 1.4em); width: 1.5em; text-align: right; }
+.textview .tw { max-width: 100%; margin: 14px auto; overflow-x: auto; border-radius: 14px; }
+.textview table { border-collapse: collapse; min-width: 100%; font-size: 0.92em; }
+.textview td { padding: 8px 10px; border: 1px solid var(--line); vertical-align: top; }
+.textview td p { margin: 0; }
+.textview mark { border-radius: 3px; padding: 0 2px; }
 .textdoc.night .textview { background: #000; color: var(--cream); }
 
 .pill {
@@ -466,35 +481,7 @@ button { font: inherit; color: inherit; }
   font-size: 22px;
 }
 
-/* sits just above the pill, with an Undo button when the action can be taken back */
-.toast {
-  position: fixed;
-  left: 50%;
-  bottom: calc(var(--bottom) + 16px + var(--dock-h) + 12px);
-  z-index: 40;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  max-width: calc(100% - 40px);
-  padding: 12px 20px;
-  border-radius: 999px;
-  background: var(--pill-bg);
-  color: var(--pill-ink);
-  font-size: 14px;
-  text-align: center;
-  transform: translateX(-50%);
-}
-.toast span { min-width: 0; }
-.toast button {
-  flex: none;
-  min-height: 34px;
-  margin: -6px -12px -6px 0;
-  padding: 0 16px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--seg);
-  color: inherit;
-  font-size: 14px;
-  font-weight: 700;
-}
-.toast button:active { filter: brightness(0.9); }
+
+/* messages in the reader take over the top bar's title for a moment */
+.bar-title.note { font-weight: 500; }
+.textview p.li { margin: 0.35em 0; }

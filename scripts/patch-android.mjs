@@ -2,7 +2,7 @@
 //  - launcher icon + splash use the Mocha Bean / Creamy Latte look (no Capacitor logo)
 //  - the app label stays exactly "Reader" (Capacitor already writes it from appName)
 //  - versionCode / versionName come from the build number so updates install cleanly
-import { cpSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -65,7 +65,6 @@ if (!manifest.includes("android:mimeType=\"application/pdf\"")) {
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="content" />
                 <data android:scheme="file" />
                 <data android:mimeType="application/pdf" />
@@ -85,7 +84,6 @@ if (!manifest.includes("android:mimeType=\"application/pdf\"")) {
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="content" />
                 <data android:scheme="file" />
                 <data android:host="*" />
@@ -101,6 +99,68 @@ ${patterns}
     manifest = manifest.replace('android:launchMode="singleTask"', 'android:launchMode="singleTask"\n            android:windowSoftInputMode="adjustResize"');
   }
   writeFileSync(manifestPath, manifest);
+}
+
+
+// 5b. Security hardening (see SECURITY.md)
+{
+  const m = readFileSync(manifestPath, "utf8");
+  let x = m;
+  const must = (cond, what) => {
+    if (!cond) throw new Error(`Hardening step failed: ${what}`);
+  };
+
+  // no network at all: the app works fully offline, so it asks for no permissions
+  x = x.replace(/\s*<uses-permission android:name="android\.permission\.INTERNET"\s*\/>/, "");
+  x = x.replace(/<!--\s*Permissions\s*-->\s*/, "");
+  if (!x.includes("xmlns:tools")) x = x.replace("<manifest ", '<manifest xmlns:tools="http://schemas.android.com/tools" ');
+  // make sure no library adds it back during the manifest merge
+  x = x.replace("</manifest>", '    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />\n</manifest>');
+
+  // no cloud/device-transfer backups of your documents, no plain-text traffic
+  must(/android:allowBackup="true"/.test(x), "allowBackup not found");
+  x = x.replace(
+    'android:allowBackup="true"',
+    'android:allowBackup="false"\n        android:fullBackupContent="false"\n        android:dataExtractionRules="@xml/data_extraction_rules"\n        android:usesCleartextTraffic="false"\n        android:networkSecurityConfig="@xml/network_security_config"\n        android:forceDarkAllowed="false"'
+  );
+  writeFileSync(manifestPath, x);
+
+  const xml = join(res, "xml");
+  mkdirSync(xml, { recursive: true });
+  writeFileSync(
+    join(xml, "data_extraction_rules.xml"),
+    `<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup><exclude domain="root" /><exclude domain="file" /><exclude domain="database" /><exclude domain="sharedpref" /><exclude domain="external" /></cloud-backup>
+    <device-transfer><exclude domain="root" /><exclude domain="file" /><exclude domain="database" /><exclude domain="sharedpref" /><exclude domain="external" /></device-transfer>
+</data-extraction-rules>
+`
+  );
+  writeFileSync(
+    join(xml, "network_security_config.xml"),
+    `<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors><certificates src="system" /></trust-anchors>
+    </base-config>
+</network-security-config>
+`
+  );
+  // sharing only ever needs the "shared" folder inside the cache; nothing else can be handed out
+  writeFileSync(
+    join(xml, "file_paths.xml"),
+    `<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <cache-path name="shared" path="shared/" />
+</paths>
+`
+  );
+
+  // the theme is chosen inside the app, so Android must not darken the web view by itself
+  let s = readFileSync(stylesPath, "utf8");
+  s = s.replace(/Theme\.AppCompat\.DayNight\.NoActionBar/g, "Theme.AppCompat.Light.NoActionBar");
+  s = s.replace(/(<style name="AppTheme\.NoActionBar"[^>]*>)/, '$1\n        <item name="android:forceDarkAllowed">false</item>');
+  writeFileSync(stylesPath, s);
 }
 
 // 6. version numbers (VERSION_NAME comes from the VERSION file, VERSION_CODE from the build number)

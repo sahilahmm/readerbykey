@@ -1,8 +1,7 @@
-### What's new in 1.0.2.6
+### What's new in 1.3
 
-- **Open Document**: the home button now opens Word (.docx) and text (.txt) files as well as PDFs. They open straight into the reflowing text view, and Night and text size work there too. Your place is remembered.
-- **Open with** now lists Reader for Word and text files, not only PDFs. It also recognises files that other apps send without a proper name or type.
-- **Select several files**: tap the circles to pick more than one, or use **Select all** at the top left. Share, Archive/Restore and Remove work on everything you picked.
-- **Undo** appears in the toast after Archive, Restore, Remove and Rename.
-- Share keeps Word and text files as they are; PDFs can still go out as PDF or Word.
-- The toast now sits just above the pill.
+- **Word files look like Word files.** Bold, italic, underline, colours and highlights, headings, bulleted and numbered lists (with levels), tables, pictures, links, alignment, page breaks and right-to-left text now show up. Sharing a PDF as Word produces a proper document: A4 page, real Heading styles, title and author details.
+- **Dark mode is yours to choose.** A moon/sun button at the top left switches it, and it no longer follows the phone's setting. Night pages follow your choice until you set them yourself.
+- **No separate toast any more.** Messages, Undo and the PDF password box all live inside the pill. In the reader, messages appear in the top bar.
+- **Security:** no internet permission at all, no backups of your files, no cleartext traffic, a Content Security Policy, PDF scripts off, limits on file size, only safe web links, and a locked-down share folder. Details in SECURITY.md.
+- **Trust and install:** release builds are not debuggable, are signed with a proper publisher name (Key by Sah), carry a SHA-256 checksum and a build attestation, and the release page shows the signing certificate to verify against.

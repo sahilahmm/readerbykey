@@ -14,8 +14,12 @@ const PDF_OPTIONS = {
   standardFontDataUrl: new URL("./lib/standard_fonts/", import.meta.url).href,
   iccUrl: new URL("./lib/iccs/", import.meta.url).href,
   wasmUrl: new URL("./lib/wasm/", import.meta.url).href,
+  isEvalSupported: false, // never build code from a document
+  enableScripting: false, // PDF JavaScript stays off
+  stopAtErrors: false,
 };
 
+const MAX_OPEN = 250 * 1024 * 1024; // refuse anything bigger than this, it would not fit in memory
 const DOC_EXT = /\.(pdf|docx|txt)$/i;
 const EXT = { pdf: ".pdf", docx: ".docx", txt: ".txt" };
 const MIME = {
@@ -33,7 +37,7 @@ const els = Object.fromEntries(
     "bPdf", "bWord", "bYes", "bNo", "bBack", "renameInput", "dockMsg",
     "bar", "title", "backBtn", "textBtn", "nightBtn", "zoomIn", "zoomOut",
     "scroller", "pages", "textView", "pill", "sheet", "jumpForm", "jumpInput",
-    "loading", "toast", "toastMsg", "toastUndo",
+    "loading", "themeBtn", "bUndo", "pwInput",
   ].map((id) => [id, $(id)])
 );
 
@@ -47,7 +51,7 @@ const state = {
   mode: "open", // dock mode
   pending: null, // what the confirm button will do
   gcat: "", // greeting category
-  undo: null, // what the toast's Undo button will do
+  undo: null, // what the pill's Undo button will do
   // reader
   open: false, // a document (of any kind) is open
   kind: null, // "pdf" | "docx" | "txt"
@@ -152,30 +156,71 @@ function store(key, value) {
   }
 }
 
-// A toast with an Undo button (when `undo` is given) stays a little longer.
-let toastTimer = 0;
+// Messages live inside the pill (home) or in the top bar (reader). There is no separate toast.
+// With an `undo`, the pill shows the message plus an Undo button for a few seconds.
+let noteTimer = 0;
 function hideToast() {
-  clearTimeout(toastTimer);
-  els.toast.hidden = true;
+  clearTimeout(noteTimer);
   state.undo = null; // lets go of anything the undo was holding on to
 }
 function toast(msg, undo) {
-  els.toastMsg.textContent = msg;
-  els.toastUndo.hidden = !undo;
+  hideToast();
+  if (els.home.hidden) {
+    // reader: borrow the title for a moment
+    els.title.textContent = msg;
+    els.title.classList.add("note");
+    noteTimer = setTimeout(() => {
+      els.title.classList.remove("note");
+      if (state.meta) els.title.textContent = stripExt(state.meta.name);
+    }, 2600);
+    return;
+  }
+  els.dockMsg.textContent = msg;
   state.undo = undo || null;
-  els.toast.hidden = false;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(hideToast, undo ? 6000 : 2800);
+  setMode(undo ? "undo" : "msg");
+  noteTimer = setTimeout(() => {
+    state.undo = null;
+    setMode(defaultMode());
+  }, undo ? 6000 : 2200);
 }
-els.toastUndo.addEventListener("click", async () => {
+els.bUndo.addEventListener("click", async () => {
   const fn = state.undo;
   hideToast();
+  setMode(defaultMode());
   if (!fn) return;
   try {
     await fn();
   } catch (err) {
     console.warn("undo failed", err);
     toast("Couldn't undo that");
+  }
+});
+
+// the password for a protected PDF is typed into the pill, not a system dialog
+let pwReply = null;
+function askPassword(wrong, reply) {
+  pwReply = reply;
+  els.loading.hidden = true;
+  els.reader.hidden = true;
+  els.home.hidden = false;
+  els.pwInput.value = "";
+  els.pwInput.placeholder = wrong ? "Wrong password, try again" : "PDF password";
+  setMode("pw");
+  setTimeout(() => els.pwInput.focus(), 300);
+}
+function answerPassword(value) {
+  const reply = pwReply;
+  pwReply = null;
+  els.pwInput.blur();
+  els.pwInput.value = "";
+  setMode(defaultMode());
+  if (value !== null) busy("Opening…");
+  if (reply) reply(value);
+}
+els.pwInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    answerPassword(els.pwInput.value);
   }
 });
 
@@ -208,6 +253,8 @@ const MODES = {
   share: ["pdf", "word", "no"],
   rename: ["input", "yes"],
   confirm: ["msg", "yes", "no"],
+  undo: ["msg", "undo"],
+  pw: ["pw", "yes", "no"],
   msg: ["msg"], //                            a short status, then back to normal
   archive: ["back"],
 };
@@ -216,6 +263,7 @@ let flashTimer = 0;
 
 function setMode(name) {
   clearTimeout(flashTimer);
+  if (name !== "undo") clearTimeout(noteTimer);
   state.mode = name;
   const on = MODES[name];
   for (const [key, el] of Object.entries(seg)) el.classList.toggle("on", on.includes(key));
@@ -372,7 +420,7 @@ function showHome() {
   els.home.hidden = false;
   state.sel.clear();
   state.view = "recent";
-  refreshHome().then(() => setGreeting(true));
+  return refreshHome().then(() => setGreeting(true));
 }
 
 /* --- tapping, selecting, long-press --- */
@@ -435,10 +483,14 @@ els.bDelete.addEventListener("click", () => {
   setMode("confirm");
 });
 
-els.bNo.addEventListener("click", () => setMode(defaultMode()));
+els.bNo.addEventListener("click", () => {
+  if (state.mode === "pw") return answerPassword(null);
+  setMode(defaultMode());
+});
 
 els.bYes.addEventListener("click", async () => {
   if (state.mode === "rename") return commitRename();
+  if (state.mode === "pw") return answerPassword(els.pwInput.value);
   if (state.mode !== "confirm" || !state.pending) return;
   const { type, ids } = state.pending;
   state.pending = null;
@@ -548,7 +600,7 @@ async function shareSelected(how) {
           skipped++;
           continue;
         }
-        items.push({ blob: x.buildDocx(pages), filename: `${base}.docx`, mime: x.DOCX_MIME });
+        items.push({ blob: x.buildDocx(pages, stripExt(m.name)), filename: `${base}.docx`, mime: x.DOCX_MIME });
       } else {
         const kind = kindOf(m);
         items.push({ blob: rec.blob, filename: `${base}${EXT[kind]}`, mime: MIME[kind] });
@@ -593,6 +645,11 @@ if (window.visualViewport) {
  * ------------------------------------------------------------------ */
 
 async function openBlob(blob, name, id) {
+  if (blob.size > MAX_OPEN) {
+    els.loading.hidden = true;
+    toast("That file is too large for Reader.");
+    return;
+  }
   let meta = null;
   try {
     meta = (await getAllMeta()).find((m) => m.id === id) || null;
@@ -621,8 +678,8 @@ async function openFromLibrary(id) {
     if (!meta || !rec) throw new Error("missing");
     openDocument({ id, name: meta.name, blob: rec.blob, meta, persist: false });
   } catch {
+    await refreshHome();
     toast("Couldn't open that file. Try opening it again.");
-    refreshHome();
   }
 }
 
@@ -703,7 +760,7 @@ async function openDocument({ id, name, blob, meta, persist }) {
   } catch (err) {
     if (gen === state.gen) {
       closeDocument();
-      showHome();
+      await showHome();
       if (err && err.name === "PasswordException") return; // they cancelled the password box
       toast(err && err.name === "Unsupported" ? "Reader opens PDF, Word (.docx) and text files." : "Couldn't open this file.");
     }
@@ -716,13 +773,10 @@ async function showPdf(gen, id, name, blob, meta) {
   const data = new Uint8Array(await blob.arrayBuffer());
   const task = pdfjsLib.getDocument({ data, ...PDF_OPTIONS });
   task.onPassword = (update, reason) => {
-    const pw = window.prompt(
-      reason === pdfjsLib.PasswordResponses.INCORRECT_PASSWORD
-        ? "Wrong password. Try again:"
-        : "This PDF is protected. Enter the password:"
-    );
-    if (pw === null) task.destroy();
-    else update(pw);
+    askPassword(reason === pdfjsLib.PasswordResponses.INCORRECT_PASSWORD, (pw) => {
+      if (pw === null) task.destroy();
+      else update(pw);
+    });
   };
   const pdf = await task.promise;
   if (gen !== state.gen) {
@@ -771,15 +825,33 @@ async function showPdf(gen, id, name, blob, meta) {
 // Word and text files open straight into the reflowing text view.
 async function showTextDoc(gen, kind, id, name, blob, meta) {
   const x = await loadDocs();
-  const paras = kind === "docx" ? await x.readDocx(blob) : await x.readText(blob);
-  if (gen !== state.gen) return false;
+  let paras = null;
+  let doc = null;
+  if (kind === "docx") doc = await x.readDocx(blob);
+  else paras = await x.readText(blob);
+  if (gen !== state.gen) {
+    if (doc) doc.urls.forEach((u) => URL.revokeObjectURL(u));
+    return false;
+  }
+  state.docUrls = doc ? doc.urls : [];
 
   state.open = true;
   state.kind = kind;
   state.id = id;
   state.meta = { ...meta, id, name, kind, total: 0, openedAt: Date.now() };
-  state.textPages = [paras];
-  renderText(state.textPages, kind === "docx" ? "This Word document has no text." : "This file is empty.");
+  if (doc) {
+    state.textPages = null;
+    els.textView.replaceChildren();
+    if (doc.blocks.length) x.renderBlocks(doc.blocks, els.textView);
+    else {
+      const p = document.createElement("p");
+      p.textContent = "This Word document has no text.";
+      els.textView.append(p);
+    }
+  } else {
+    state.textPages = [paras];
+    renderText(state.textPages, "This file is empty.");
+  }
   els.title.textContent = stripExt(name);
 
   els.home.hidden = true;
@@ -806,6 +878,8 @@ function closeDocument() {
   state.open = false;
   state.kind = null;
   state.textPages = null;
+  if (state.docUrls) state.docUrls.forEach((u) => URL.revokeObjectURL(u));
+  state.docUrls = null;
   els.reader.classList.remove("textdoc");
   setTextView(false);
   els.textView.replaceChildren();
@@ -1191,6 +1265,31 @@ window.addEventListener("resize", () => {
  *  Night pages
  * ------------------------------------------------------------------ */
 
+function currentTheme() {
+  return document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+}
+function paintTheme(save) {
+  const dark = currentTheme() === "dark";
+  els.themeBtn.querySelector("use").setAttribute("href", dark ? "#i-sun" : "#i-moon");
+  els.themeBtn.setAttribute("aria-label", dark ? "Switch to light theme" : "Switch to dark theme");
+  try {
+    const bars = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.SystemBars;
+    // DARK = light icons for a dark screen
+    if (bars && bars.setStyle) bars.setStyle({ style: dark ? "DARK" : "LIGHT" }).catch(() => {});
+  } catch {
+    /* web preview: nothing to do */
+  }
+  if (save) store("reader.theme", dark ? "dark" : "light");
+}
+els.themeBtn.addEventListener("click", () => {
+  const next = currentTheme() === "dark" ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", next);
+  paintTheme(true);
+  // pages follow the theme until the person picks Night pages themselves
+  if (store("reader.night") === null) state.night = next === "dark";
+});
+paintTheme(false);
+
 function applyNight(on) {
   state.night = on;
   els.reader.classList.toggle("night", on);
@@ -1198,7 +1297,7 @@ function applyNight(on) {
 }
 {
   const saved = store("reader.night");
-  state.night = saved === null ? matchMedia("(prefers-color-scheme: dark)").matches : saved === "1";
+  state.night = saved === null ? currentTheme() === "dark" : saved === "1";
   state.tz = clamp(parseFloat(store("reader.tz")) || 1, 0.8, 2.4);
   els.textView.style.setProperty("--tz", state.tz);
 }
@@ -1315,7 +1414,8 @@ if (capApp && capApp.addListener) {
   capApp.addListener("backButton", () => {
     if (!els.sheet.hidden) closeSheet();
     else if (state.open) goHome();
-    else if (["share", "rename", "confirm"].includes(state.mode)) setMode(defaultMode());
+    else if (state.mode === "pw") answerPassword(null);
+    else if (["share", "rename", "confirm", "undo"].includes(state.mode)) setMode(defaultMode());
     else if (state.sel.size) clearSel();
     else if (state.view === "archive") els.bBack.click();
     else capApp.exitApp();
