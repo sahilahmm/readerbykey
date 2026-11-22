@@ -6,3 +6,4 @@ www/lib/
 *.keystore
 signing-secrets.txt
 .DS_Store
+www/licenses.txt

@@ -90,6 +90,12 @@ jobs:
               --key-pass env:KEYSTORE_PASSWORD \
               --out "../dist/$APK_NAME" "$RUNNER_TEMP/aligned.apk"
             "$BT/apksigner" verify --print-certs "../dist/$APK_NAME"
+            # Google Play takes an app bundle (.aab), signed with the same key as the upload key
+            ./gradlew --no-daemon bundleRelease
+            jarsigner -keystore "$RUNNER_TEMP/release.jks" -storepass:env KEYSTORE_PASSWORD -keypass:env KEYSTORE_PASSWORD \
+              -sigalg SHA256withRSA -digestalg SHA-256 \
+              app/build/outputs/bundle/release/app-release.aab reader
+            cp app/build/outputs/bundle/release/app-release.aab "../dist/Reader-by-Key.aab"
             rm -f "$RUNNER_TEMP/release.jks"
             echo release > ../dist/signing.txt
           else
@@ -115,8 +121,11 @@ jobs:
 
       - name: Checksum and signer fingerprint
         run: |
+          # software bill of materials (every library inside the app), for the EU Cyber Resilience Act
+          npm sbom --sbom-format cyclonedx --omit dev > dist/Reader-by-Key.sbom.cdx.json
           cd dist
           sha256sum "$APK_NAME" > "$APK_NAME.sha256"
+          [ -f Reader-by-Key.aab ] && sha256sum Reader-by-Key.aab > Reader-by-Key.aab.sha256 || true
           BT="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
           "$BT/apksigner" verify --print-certs "$APK_NAME" | grep -i "SHA-256 digest" | head -1 > signer.txt || true
           cat "$APK_NAME.sha256" signer.txt
@@ -165,12 +174,15 @@ jobs:
             echo "### Verify this download"
             echo "- SHA-256 of the APK: \`$(cut -d' ' -f1 dist/$APK_NAME.sha256)\`"
             echo "- Signing certificate: \`$(sed 's/.*: //' dist/signer.txt)\`"
+            echo "- Software bill of materials: \`Reader-by-Key.sbom.cdx.json\` (CycloneDX)."
             echo "- Built by GitHub Actions from this repository, with a build attestation (\`gh attestation verify $APK_NAME --repo sahilahmm/readerbykey\`)."
           } > "$RUNNER_TEMP/notes.md"
 
           gh release delete "$TAG" --cleanup-tag --yes || true
           gh release delete latest --cleanup-tag --yes || true   # the old rolling release, if it still exists
-          gh release create "$TAG" "dist/$APK_NAME" "dist/$APK_NAME.sha256" \
+          EXTRA=""
+          [ -f dist/Reader-by-Key.aab ] && EXTRA="dist/Reader-by-Key.aab dist/Reader-by-Key.aab.sha256"
+          gh release create "$TAG" "dist/$APK_NAME" "dist/$APK_NAME.sha256" dist/Reader-by-Key.sbom.cdx.json $EXTRA \
             --title "Reader by Key $VERSION_NAME" \
             --notes-file "$RUNNER_TEMP/notes.md" \
             --target "$GITHUB_SHA" \

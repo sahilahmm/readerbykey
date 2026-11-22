@@ -32,6 +32,14 @@ The release notes also list the SHA-256 of the signing certificate. It must stay
 - **Documents are stored unencrypted** in the app's private storage. Other apps cannot read them without root, but anyone who unlocks your phone can open Reader. Use your phone's lock screen.
 - Reader is not a malware scanner. It will not run a document's macros or scripts, but a booby-trapped document you share onward is still booby-trapped.
 
+## Vulnerability handling (EU Cyber Resilience Act)
+
+- Report privately: https://github.com/sahilahmm/readerbykey/security/advisories/new (also in `security.txt`). Please give me a reasonable time to fix before telling anyone.
+- I aim to acknowledge within 5 days and ship a fix as a new release; the advisory then explains what was fixed.
+- A software bill of materials (CycloneDX) is attached to every release so you can see exactly which libraries are inside.
+- If a vulnerability in Reader is actively exploited, it is reported to the authorities as the Cyber Resilience Act requires (24 hours early warning, 72 hours notification, final report after the fix).
+- Supported version: the latest release only.
+
 ## Reporting a problem
 
 Open a private security advisory on this repository (Security tab > Report a vulnerability), or open an issue if it is not sensitive.

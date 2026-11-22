@@ -4,7 +4,7 @@
   "private": true,
   "description": "Reader by Key: a simple, fast PDF reader for Android",
   "scripts": {
-    "prepare:web": "node scripts/prepare-web.mjs",
+    "prepare:web": "node scripts/prepare-web.mjs && node scripts/notices.mjs",
     "android:add": "npx cap add android",
     "android:sync": "npm run prepare:web && npx cap sync android"
   },

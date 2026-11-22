@@ -1,7 +1,8 @@
-### What's new in 1.3
+### What's new in 1.3.5
 
-- **Word files look like Word files.** Bold, italic, underline, colours and highlights, headings, bulleted and numbered lists (with levels), tables, pictures, links, alignment, page breaks and right-to-left text now show up. Sharing a PDF as Word produces a proper document: A4 page, real Heading styles, title and author details.
-- **Dark mode is yours to choose.** A moon/sun button at the top left switches it, and it no longer follows the phone's setting. Night pages follow your choice until you set them yourself.
-- **No separate toast any more.** Messages, Undo and the PDF password box all live inside the pill. In the reader, messages appear in the top bar.
-- **Security:** no internet permission at all, no backups of your files, no cleartext traffic, a Content Security Policy, PDF scripts off, limits on file size, only safe web links, and a locked-down share folder. Details in SECURITY.md.
-- **Trust and install:** release builds are not debuggable, are signed with a proper publisher name (Key by Sah), carry a SHA-256 checksum and a build attestation, and the release page shows the signing certificate to verify against.
+- **Ready for Google Play.** Targets Android 16 (API 36). Releases now include an Android App Bundle (`.aab`, when your permanent key is set up) next to the APK.
+- **EU-ready.** A software bill of materials (SBOM) ships with every release, a vulnerability-reporting policy and `security.txt` are in place, and the privacy policy is published as a web page. See COMPLIANCE.md.
+- **Open-source notices** now ship inside the app (`licenses.txt`).
+- **Accessibility:** bigger touch targets (48 dp), a visible focus ring, and animations switch off when Android's "remove animations" is on.
+- Ready-made Play Console answers (Data safety, content rating, listing text) are in the `store/` folder.
+- No change to what the app does with your files: nothing leaves your phone, no permissions.

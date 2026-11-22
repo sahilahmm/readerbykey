@@ -102,8 +102,8 @@ button { font: inherit; color: inherit; }
   position: absolute;
   top: calc(var(--top) + 16px);
   right: 16px;
-  min-height: 40px;
-  padding: 0 16px;
+  min-height: 48px;
+  padding: 0 18px;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--soft);
@@ -111,8 +111,8 @@ button { font: inherit; color: inherit; }
   font-weight: 600;
 }
 .chip:active { opacity: 0.8; }
-#allChip { right: auto; left: 64px; }
-#themeBtn { right: auto; left: 16px; width: 40px; padding: 0; display: grid; place-items: center; }
+#allChip { right: auto; left: 72px; }
+#themeBtn { right: auto; left: 16px; width: 48px; padding: 0; display: grid; place-items: center; }
 .chip .ic { width: 20px; height: 20px; }
 .sprite { position: absolute; } /* "Select all" sits opposite the Archive chip */
 
@@ -168,10 +168,10 @@ button { font: inherit; color: inherit; }
 
 .dot {
   position: absolute;
-  top: calc(var(--card-pad) - 2px);
-  right: calc(var(--card-pad) - 2px);
-  width: 36px;
-  height: 36px;
+  top: calc(var(--card-pad) - 8px);
+  right: calc(var(--card-pad) - 8px);
+  width: 48px;
+  height: 48px;
   display: grid;
   place-items: center;
   padding: 0;
@@ -485,3 +485,14 @@ button { font: inherit; color: inherit; }
 /* messages in the reader take over the top bar's title for a moment */
 .bar-title.note { font-weight: 500; }
 .textview p.li { margin: 0.35em 0; }
+
+/* accessibility: keyboard / switch-access focus ring, and no motion for people who turn animations off */
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

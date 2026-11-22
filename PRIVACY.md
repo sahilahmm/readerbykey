@@ -1,3 +1,5 @@
 # Privacy
 
-Reader collects nothing. It has no accounts, no analytics, no ads and no internet permission. Your documents, your recent list and your reading position are stored only in the app's private storage on your phone. If you share a file, it goes to the app you choose, and that app's privacy rules apply. Uninstalling Reader deletes everything it stored.
+The full policy is at https://sahilahmm.github.io/readerbykey/privacy.html (source: `docs/privacy.html`).
+
+In short: Reader collects nothing. No accounts, ads, analytics or trackers, and no internet permission. Documents, recent list, reading position and theme stay in the app's private storage and are excluded from Android backups. A file leaves the phone only when you share it.

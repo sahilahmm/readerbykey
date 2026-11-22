@@ -81,6 +81,10 @@ Keep `reader-release.jks` safe and never commit it. If you lose it you cannot up
 - Name on the phone: `appName` in `capacitor.config.json` (`Reader`).
 - App id: `com.keybysah.reader`. Changing it later makes Android treat it as a different app.
 
+## Google Play and EU
+
+See [COMPLIANCE.md](COMPLIANCE.md) for what is done in code and what only you can do in Play Console, plus ready-to-paste answers in `store/`. With the permanent key set up, each release also carries `Reader-by-Key.aab` (the file Google Play takes) and an SBOM.
+
 ## Why Android may say "scan app" when you install
 
 That message comes from Google Play Protect, and Chrome may also warn about downloading an APK. It appears for any app installed from outside a store, and the app itself cannot turn it off. What helps:
