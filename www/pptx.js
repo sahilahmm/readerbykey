@@ -143,6 +143,70 @@ async function relsOf(zip, part) {
 }
 const firstRel = (rels, type) => [...rels.values()].find((r) => r.type === type) || null;
 
+
+/* ---------- pictures stored as EMF / WMF: pull out the bitmap inside ---------- */
+
+// a device-independent bitmap (header + pixels) as something the browser can show
+function dibToImage(bytes, off, bmiLen, bitsOff, bitsLen) {
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (bmiLen < 12 || off + bmiLen > bytes.length || bitsOff + bitsLen > bytes.length || bitsLen <= 0) return null;
+  const comp = bmiLen >= 20 ? dv.getUint32(off + 16, true) : 0;
+  if (comp === 4 || comp === 5) return { data: bytes.slice(bitsOff, bitsOff + bitsLen), type: comp === 4 ? "image/jpeg" : "image/png" };
+  if (bmiLen < 40) return null;
+  const w = Math.abs(dv.getInt32(off + 4, true)), h = Math.abs(dv.getInt32(off + 8, true));
+  if (!w || !h || w * h > 120e6) return null;
+  const out = new Uint8Array(14 + bmiLen + bitsLen);
+  const odv = new DataView(out.buffer);
+  out[0] = 0x42; out[1] = 0x4d;
+  odv.setUint32(2, out.length, true);
+  odv.setUint32(10, 14 + bmiLen, true);
+  out.set(bytes.subarray(off, off + bmiLen), 14);
+  out.set(bytes.subarray(bitsOff, bitsOff + bitsLen), 14 + bmiLen);
+  return { data: out, type: "image/bmp", area: w * h };
+}
+
+function bitmapFromEmf(b) {
+  const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  let best = null;
+  for (let p = 0, n = 0; p + 8 <= b.length && n < 100000; n++) {
+    const type = dv.getUint32(p, true), size = dv.getUint32(p + 4, true);
+    if (size < 8 || p + size > b.length) break;
+    let offBmi = 0, cbBmi = 0, offBits = 0, cbBits = 0;
+    if (type === 81 && size >= 80) [offBmi, cbBmi, offBits, cbBits] = [48, 52, 56, 60].map((o) => dv.getUint32(p + o, true));
+    else if ((type === 76 || type === 77) && size >= 100) [offBmi, cbBmi, offBits, cbBits] = [84, 88, 92, 96].map((o) => dv.getUint32(p + o, true));
+    if (cbBmi && cbBits) {
+      const img = dibToImage(b, p + offBmi, cbBmi, p + offBits, cbBits);
+      if (img && (!best || (img.area || 1e9) > (best.area || 1e9) || cbBits > best.size)) best = { ...img, size: cbBits };
+    }
+    p += size;
+  }
+  return best;
+}
+
+function bitmapFromWmf(b) {
+  const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  let p = dv.getUint32(0, true) === 0x9ac6cdd7 ? 22 : 0;
+  p += 18; // the metafile header
+  let best = null;
+  for (let n = 0; p + 6 <= b.length && n < 100000; n++) {
+    const size = dv.getUint32(p, true) * 2, fn = dv.getUint16(p + 4, true);
+    if (size < 6 || p + size > b.length) break;
+    const dibAt = fn === 0x0f43 ? p + 28 : fn === 0x0b41 ? p + 26 : 0;
+    if (dibAt && dibAt + 40 <= p + size) {
+      const hdr = dv.getUint32(dibAt, true);
+      const bits = dv.getUint16(dibAt + 14, true);
+      const comp = dv.getUint32(dibAt + 16, true);
+      let colors = dv.getUint32(dibAt + 32, true);
+      if (!colors && bits <= 8) colors = 1 << bits;
+      const bmiLen = hdr + (bits <= 8 ? colors * 4 : 0) + (comp === 3 ? 12 : 0);
+      const img = dibToImage(b, dibAt, bmiLen, dibAt + bmiLen, p + size - (dibAt + bmiLen));
+      if (img && (!best || (img.area || 0) > (best.area || 0))) best = img;
+    }
+    p += size;
+  }
+  return best;
+}
+
 /* ---------- reading a presentation ---------- */
 
 export async function readPptx(blob) {
@@ -164,7 +228,23 @@ export async function readPptx(blob) {
     if (imageCache.has(path)) return imageCache.get(path);
     let url = null;
     const ext = (path.split(".").pop() || "").toLowerCase();
-    const type = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", bmp: "image/bmp", svg: "image/svg+xml" }[ext];
+    let type = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", bmp: "image/bmp", svg: "image/svg+xml" }[ext];
+    if (!type && (ext === "emf" || ext === "wmf") && zip.has(path) && urls.length < MAX_IMAGES && imageBytes + zip.size(path) <= MAX_IMAGE_BYTES) {
+      // old Office pictures: most are a photo or scan wrapped in a metafile, so lift the bitmap out
+      try {
+        const bytes = await zip.get(path, MAX_IMAGE_BYTES);
+        imageBytes += bytes.length;
+        const bmp = ext === "emf" ? bitmapFromEmf(bytes) : bitmapFromWmf(bytes);
+        if (bmp) {
+          url = URL.createObjectURL(new Blob([bmp.data], { type: bmp.type }));
+          urls.push(url);
+        }
+      } catch {
+        /* leave it as a labelled box */
+      }
+      imageCache.set(path, url);
+      return url;
+    }
     if (type && zip.has(path) && urls.length < MAX_IMAGES && imageBytes + zip.size(path) <= MAX_IMAGE_BYTES) {
       try {
         const bytes = await zip.get(path, MAX_IMAGE_BYTES);
@@ -641,7 +721,7 @@ export async function readPptx(blob) {
       if (!url) {
         // a format we can't draw (EMF, WMF, TIFF...): keep its place so the slide isn't silently empty
         if (layer === "slide") {
-          items.push({ t: "note", ...rect, label: "Picture" });
+          items.push({ t: "note", ...rect, label: rel && rel.target ? `Picture (.${(rel.target.split(".").pop() || "").toLowerCase().slice(0, 5)})` : "Picture" });
           count++;
         }
         return;
