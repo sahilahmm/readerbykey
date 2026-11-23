@@ -169,6 +169,33 @@ const kindOf = (m) => m.kind || "pdf"; // files saved before Word/text support a
 const extOf = (m) => (m.name.match(DOC_EXT) || [EXT[kindOf(m)]])[0];
 // a name with no extension at all gets the right one; ".md" and friends are left alone
 const withExt = (name, kind) => (/\.[A-Za-z0-9]{1,5}$/.test(name) ? name : name + EXT[kind]);
+// Light haptics. Uses Capacitor's Haptics plugin (works on Android and iOS), else the browser's vibrate.
+let lastBuzz = 0;
+function buzz(kind = "tap") {
+  const now = Date.now();
+  if (now - lastBuzz < 35) return;
+  lastBuzz = now;
+  try {
+    const h = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Haptics;
+    if (h) {
+      if (kind === "select") h.selectionChanged();
+      else if (kind === "warn") h.notification({ type: "WARNING" });
+      else if (kind === "ok") h.notification({ type: "SUCCESS" });
+      else h.impact({ style: "LIGHT" });
+    } else if (navigator.vibrate) navigator.vibrate(kind === "warn" ? [12, 40, 12] : kind === "ok" ? 14 : 8);
+  } catch {
+    /* haptics are a nicety */
+  }
+}
+// every button, checkbox dot and pin gives a small tap
+document.addEventListener(
+  "click",
+  (e) => {
+    if (e.target.closest && e.target.closest("button, .dot, .pin, .card")) buzz("tap");
+  },
+  true
+);
+
 const pick = (list) => list[Math.floor(Math.random() * list.length)];
 const selMetas = () => state.all.filter((m) => state.sel.has(m.id));
 
@@ -537,7 +564,7 @@ function dragTo(e) {
   }
   drag.last = card.dataset.id;
   drag.moved = true;
-  if (navigator.vibrate) navigator.vibrate(6);
+  buzz("select");
   markSel();
   setMode(defaultMode());
 }
@@ -622,6 +649,7 @@ els.bRemove.addEventListener("click", () => {
 els.bDelete.addEventListener("click", () => {
   const ids = [...state.sel];
   if (!ids.length) return;
+  buzz("warn");
   state.pending = { type: "remove", ids };
   els.dockMsg.textContent = ids.length > 1 ? `Remove ${ids.length} files?` : "Remove this file?";
   setMode("confirm");
@@ -995,7 +1023,7 @@ async function showPdf(gen, id, name, blob, meta) {
   // resume where the reader left off, leaving room so nothing hides under the top bar
   const start = { idx: clamp(meta.idx || 0, 0, pdf.numPages - 1), frac: meta.frac || 0 };
   if (start.idx === 0 && start.frac <= 0) els.scroller.scrollTop = 0;
-  else scrollToAnchor(start, els.bar.offsetHeight + 4);
+  else scrollToAnchor(start, 8);
   setChrome(true);
   updateVisible();
   loadSizes(gen);
@@ -1040,7 +1068,7 @@ async function showDeck(gen, id, name, blob, meta) {
   layout();
   const start = { idx: clamp(meta.idx || 0, 0, deck.slides.length - 1), frac: meta.frac || 0 };
   if (start.idx === 0 && start.frac <= 0) els.scroller.scrollTop = 0;
-  else scrollToAnchor(start, els.bar.offsetHeight + 4);
+  else scrollToAnchor(start, 8);
   setChrome(true);
   updateVisible();
   return true;
@@ -1402,9 +1430,12 @@ function setChrome(visible) {
   els.reader.classList.toggle("chrome-hidden", !visible);
   if (visible) state.chromeShownAt = scrollPos();
 }
+let chromeTimer = 0;
 function tapToggleChrome() {
   if (window.getSelection && String(window.getSelection())) return;
-  setChrome(state.chromeHidden);
+  // wait a beat: a second tap means "zoom", not "show or hide the toolbar"
+  clearTimeout(chromeTimer);
+  chromeTimer = setTimeout(() => setChrome(state.chromeHidden), 260);
 }
 els.scroller.addEventListener("click", tapToggleChrome);
 els.textView.addEventListener("click", tapToggleChrome);
@@ -1487,6 +1518,51 @@ els.scroller.addEventListener("touchend", (e) => {
   if (pinch && e.touches.length < 2) endPinch();
 });
 els.scroller.addEventListener("touchcancel", endPinch);
+
+// Double tap: zoom in on the spot you tapped, double tap again to go back to fit-width.
+// In Text view it switches the text between normal and large.
+let lastTap = null;
+let tapStart = null;
+function watchDoubleTap(el, onDouble) {
+  el.addEventListener(
+    "touchstart",
+    (e) => {
+      tapStart = e.touches.length === 1 ? { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() } : null;
+      if (e.touches.length > 1) lastTap = null;
+    },
+    { passive: true }
+  );
+  el.addEventListener("touchend", (e) => {
+    if (!tapStart || e.touches.length || e.changedTouches.length !== 1 || pinch) return;
+    const t = e.changedTouches[0];
+    const moved = Math.hypot(t.clientX - tapStart.x, t.clientY - tapStart.y);
+    const quick = Date.now() - tapStart.t < 300;
+    tapStart = null;
+    if (moved > 12 || !quick) {
+      lastTap = null;
+      return;
+    }
+    const now = Date.now();
+    if (lastTap && now - lastTap.t < 320 && Math.hypot(t.clientX - lastTap.x, t.clientY - lastTap.y) < 40) {
+      lastTap = null;
+      clearTimeout(chromeTimer);
+      e.preventDefault(); // no click, so the toolbar doesn't flicker
+      onDouble(t.clientX, t.clientY);
+    } else lastTap = { x: t.clientX, y: t.clientY, t: now };
+  });
+}
+watchDoubleTap(els.scroller, (x, y) => {
+  if (!state.pdf) return;
+  const r = els.scroller.getBoundingClientRect();
+  buzz("tap");
+  zoomAt(state.zoom > 1.08 ? 1 : Math.min(MAX_ZOOM, 2.2), x - r.left, y - r.top);
+});
+watchDoubleTap(els.textView, () => {
+  state.tz = state.tz > 1.2 ? 1 : 1.6;
+  els.textView.style.setProperty("--tz", state.tz);
+  store("reader.tz", String(state.tz));
+  buzz("tap");
+});
 
 /* ------------------------------------------------------------------ *
  *  Rotation / resize
@@ -1648,7 +1724,7 @@ els.jumpForm.addEventListener("submit", (e) => {
   e.preventDefault();
   const n = clamp(parseInt(els.jumpInput.value, 10) || 1, 1, state.pages.length);
   closeSheet();
-  scrollToAnchor({ idx: n - 1, frac: 0 }, state.chromeHidden ? 12 : els.bar.offsetHeight + 8);
+  scrollToAnchor({ idx: n - 1, frac: 0 }, 12);
   updateVisible();
 });
 function closeSheet() {

@@ -14,7 +14,6 @@ const EMU = 9525; // EMU per CSS pixel (96 dpi)
 const MAX_FILE = 150 * 1024 * 1024;
 const MAX_SLIDES = 1000;
 const MAX_ITEMS = 2500; // per slide
-const MAX_IMAGES = 300;
 const MAX_IMAGE_BYTES = 96 * 1024 * 1024; // one picture, unpacked
 
 const unsupported = (msg) => Object.assign(new Error(msg), { name: "Unsupported" });
@@ -464,6 +463,7 @@ export async function readPptx(blob) {
             if (at(d, "i") !== null) rp.i = flag(at(d, "i"));
             if (at(d, "u") !== null) rp.u = at(d, "u") !== "none";
             if (at(d, "strike") !== null) rp.s = at(d, "strike") !== "noStrike";
+            if (at(d, "lang")) rp.lang = at(d, "lang").slice(0, 12);
             if (at(d, "baseline") !== null) rp.base = num(at(d, "baseline"));
             if (at(d, "cap") !== null) rp.cap = at(d, "cap") === "all";
             const sf = c(d, "solidFill");
@@ -853,14 +853,17 @@ function paragraphBox(p, k, baseColor, ctxFonts, defaultSz) {
   const div = document.createElement("div");
   const sizes = p.runs.map((r) => r.sz).filter(Boolean);
   const size = (sizes[0] || p.endSz || defaultSz) * (4 / 3);
-  div.dir = p.rtl ? "rtl" : "auto";
-  let align = { l: "left", ctr: "center", r: "right", just: "justify", dist: "justify" }[p.algn] || "left";
-  if (p.rtl && align === "left") align = "right";
-  else if (p.rtl && align === "right") align = "left";
+  div.dir = p.rtl ? "rtl" : "ltr";
+  // l and r in a presentation are physical sides; with no alignment given, a right-to-left paragraph sits on the right
+  const align = { l: "left", ctr: "center", r: "right", just: "justify", dist: "justify" }[p.algn] || (p.rtl ? "right" : "left");
   div.style.textAlign = align;
+  const lang = (p.runs.find((r) => r.lang) || {}).lang;
+  if (lang) div.lang = lang;
   div.style.fontSize = `calc(var(--k,1) * ${pxs(size)})`;
   const lh = p.lnSpc ? (p.lnSpc.pct ? p.lnSpc.pct * 1.2 : p.lnSpc.pt ? (p.lnSpc.pt * 4) / 3 / size : 1.2) : 1.2;
-  div.style.lineHeight = String(Math.round(lh * 100) / 100);
+  // Bengali, Arabic, Devanagari and similar scripts have tall marks above and below the line
+  const tall = /[\u0600-\u06ff\u0750-\u077f\u0900-\u0dff\u0e00-\u0eff]/.test(p.text || "");
+  div.style.lineHeight = String(Math.max(Math.round(lh * 100) / 100, tall ? 1.45 : 0));
   const gap = (s) => (!s ? 0 : s.pt ? (s.pt * 4) / 3 : s.pct ? s.pct * size : 0);
   div.style.marginTop = `calc(var(--k,1) * ${pxs(gap(p.spcBef))})`;
   div.style.marginBottom = `calc(var(--k,1) * ${pxs(gap(p.spcAft))})`;
@@ -868,18 +871,18 @@ function paragraphBox(p, k, baseColor, ctxFonts, defaultSz) {
   div.style.overflowWrap = "break-word";
   div.style.minHeight = "1em";
   const ind = p.bullet ? p.indent : p.indent;
-  if (p.rtl) div.style.paddingRight = pxs(p.marL);
-  else div.style.paddingLeft = pxs(p.marL);
+  const side = p.rtl ? "Right" : "Left";
+  div.style["padding" + side] = pxs(p.marL);
   if (p.bullet) {
     const b = document.createElement("span");
     b.textContent = p.bullet;
     b.style.display = "inline-block";
     b.style.width = pxs(Math.max(size * 0.6, -ind));
-    b.style.marginLeft = p.rtl ? "0" : pxs(Math.min(0, ind));
+    b.style["margin" + side] = pxs(Math.min(0, ind));
     b.style.textIndent = "0";
     if (p.buClr) b.style.color = p.buClr;
     div.append(b);
-    if (-ind < size * 0.6) div.style.paddingLeft = pxs(p.marL + (size * 0.6 + ind));
+    if (-ind < size * 0.6) div.style["padding" + side] = pxs(p.marL + (size * 0.6 + ind));
   } else if (ind) div.style.textIndent = pxs(ind);
 
   for (const r of p.runs) {
@@ -900,6 +903,7 @@ function paragraphBox(p, k, baseColor, ctxFonts, defaultSz) {
     const deco = [r.u ? "underline" : "", r.s ? "line-through" : ""].filter(Boolean).join(" ");
     if (deco) span.style.textDecoration = deco;
     span.style.color = r.color || baseColor;
+    if (r.lang) span.lang = r.lang;
     if (r.font) span.style.fontFamily = fontStack(r.font, { fonts: ctxFonts });
     if (r.base) {
       span.style.verticalAlign = r.base > 0 ? "super" : "sub";

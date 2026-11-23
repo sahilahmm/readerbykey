@@ -360,7 +360,7 @@ button { font: inherit; color: inherit; }
 
 .bar {
   position: fixed;
-  top: calc(var(--top) + 8px);
+  bottom: calc(var(--bottom) + 8px);
   left: 8px;
   right: 8px;
   z-index: 5;
@@ -397,8 +397,8 @@ button { font: inherit; color: inherit; }
 }
 .icon:active, .icon[aria-pressed="true"] { background: var(--soft2); }
 
-.chrome-hidden .bar { transform: translateY(calc(-100% - var(--top) - 16px)); }
-.chrome-hidden .pill { opacity: 0; pointer-events: none; }
+.chrome-hidden .bar { transform: translateY(calc(100% + var(--bottom) + 16px)); }
+.chrome-hidden .pill { bottom: calc(var(--bottom) + 18px); } /* the page indicator drops down when the toolbar hides */
 
 .scroller {
   position: absolute;
@@ -417,7 +417,7 @@ button { font: inherit; color: inherit; }
   gap: 12px;
   width: max-content;
   min-width: 100%;
-  padding: calc(var(--top) + 84px) 12px calc(var(--bottom) + 96px);
+  padding: calc(var(--top) + 16px) 12px calc(var(--bottom) + 140px);
 }
 .page {
   flex: none;
@@ -444,7 +444,7 @@ button { font: inherit; color: inherit; }
   inset: 0;
   z-index: 1;
   overflow: auto;
-  padding: calc(var(--top) + 88px) 22px calc(var(--bottom) + 48px);
+  padding: calc(var(--top) + 28px) 22px calc(var(--bottom) + 140px);
   background: var(--bg);
   font-family: var(--serif);
   font-size: calc(19px * var(--tz, 1));
@@ -481,14 +481,18 @@ button { font: inherit; color: inherit; }
 .textview td { padding: 8px 10px; border: 1px solid var(--line); vertical-align: top; }
 .textview td p { margin: 0; }
 .textview mark { border-radius: 3px; padding: 0 2px; }
-.textdoc.night .textview { background: #000; color: var(--cream); }
+/* Word files carry their own colours, so night mode flips the whole page like it does for PDFs */
+.textdoc.night .textview { background: #fff; color: #111; filter: invert(1) hue-rotate(180deg); }
+.textdoc.night .textview img { filter: invert(1) hue-rotate(180deg); }
+.textdoc.night .textview a { color: #1a56c8; }
+.textdoc.night .textview td { border-color: rgba(0, 0, 0, 0.3); }
 
 .pill {
   position: fixed;
   left: 50%;
-  bottom: calc(var(--bottom) + 18px);
+  bottom: calc(var(--bottom) + 76px); /* sits just above the toolbar */
   z-index: 5;
-  min-height: 44px;
+  min-height: 40px;
   padding: 0 20px;
   border: 0;
   border-radius: 22px;
@@ -498,7 +502,7 @@ button { font: inherit; color: inherit; }
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   transform: translateX(-50%);
-  transition: opacity 0.2s ease;
+  transition: opacity 0.2s ease, bottom 0.25s ease;
 }
 
 /* ---------- Go to page, loading, toast ---------- */

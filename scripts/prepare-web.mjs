@@ -22,7 +22,10 @@ cpSync(join(pdfjs, "legacy", "build", "pdf.worker.min.mjs"), join(out, "pdf.work
 // Resources PDF.js loads on demand (fonts, color profiles, image decoders).
 // The big CJK character maps (cmaps) are left out to keep the app small.
 for (const dir of ["standard_fonts", "iccs", "wasm"]) {
-  if (existsSync(join(pdfjs, dir))) cpSync(join(pdfjs, dir), join(out, dir), { recursive: true });
+  // PDF scripting is off, so its engine (quickjs) is not shipped; WebViews all run WebAssembly,
+  // so the slow JavaScript fallbacks for the image decoders are left out too.
+  const skip = /quickjs|nowasm_fallback/;
+  if (existsSync(join(pdfjs, dir))) cpSync(join(pdfjs, dir), join(out, dir), { recursive: true, filter: (src) => !skip.test(src) });
 }
 
 console.log("PDF.js copied to www/lib");

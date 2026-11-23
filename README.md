@@ -26,6 +26,7 @@ Open that link on your phone, then install the file. Android asks you to allow i
 - **Word files** keep their look: bold/italic/underline, colours, headings, lists, tables, pictures and links. A PDF shared as Word gets real headings and an A4 page.
 - **Dark mode is your choice**: the moon/sun button at the top left. It ignores the phone's setting.
 - **PowerPoint files** open slide by slide like pages: text, shapes, pictures, tables, SmartArt and speaker notes (in Text view). Charts show as a placeholder, animations and media are not played, and old .ppt files are not supported. Viewing only, no PowerPoint export.
+- **Double tap** a page to zoom in on it, double tap again to fit. Small haptic taps across the app.
 - Appears in Android's **Open with** list for PDF, Word, PowerPoint and text files (WhatsApp, Files, browsers).
 - Remembers the page and zoom for each file.
 - Works fully offline with no internet permission. Your files never leave your phone unless you share them. See [SECURITY.md](SECURITY.md) and [PRIVACY.md](PRIVACY.md).

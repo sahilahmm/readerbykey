@@ -1,5 +1,8 @@
-### What's new in 1.4.1.5
+### What's new in 1.4.5
 
-- **Big slide decks open instantly.** Decks full of scanned pages (some are over 100 MB once unpacked) used to be unpacked all at once before anything showed. Reader now opens the first slide straight away and loads each slide's pictures only as you scroll to it, one at a time, so memory stays low.
-- **Scanned pictures and all their labels now show** on every slide, including very large EMF pictures.
-- A picture that can't be drawn keeps a labelled box instead of leaving a blank slide.
+- **Double-tap to zoom.** Double tap a page or slide to zoom in on that spot, double tap again to fit the screen. In Text view it switches between normal and large text.
+- **Haptic feedback.** Buttons, selecting, dragging to select, double tap and delete confirmations now give a small tap.
+- **Toolbar at the bottom.** The reader toolbar moved to the bottom for one-hand use, with the page number sitting just above it.
+- **Word dark mode fixed.** Word documents now flip to a proper dark page, including coloured text, tables and pictures.
+- **Better PowerPoint languages.** Bengali, Arabic, Hindi and other scripts get correct direction, spacing and alignment on slides.
+- **Lighter app.** About 1.3 MB of unused PDF engine parts removed.
