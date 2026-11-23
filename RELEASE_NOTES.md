@@ -1,6 +1,7 @@
-### What's new in 1.3.6.1
+### What's new in 1.4
 
-- **Calmer first page.** With nothing saved, the greeting and "Nothing here yet" now sit in the middle of the screen. As soon as you have a file, the greeting disappears and your files get the space.
-- **Archive chip next to the theme button**, both in the thumb zone.
-- **Archive redesigned to match the first page.** Same layout: the tools row sits right above your files, the newest ones are closest to your thumb, and groups (Today, This week, months, or PDF/Word/Text) have quiet small headings. A small "Archive · N" label tells you where you are, and the pill's Recent button takes you back.
-- **Smooth switching.** Moving between Recent and the Archive fades and slides gently instead of jumping.
+- **PowerPoint support.** Open `.pptx` and `.ppsx` files from the Open button or "Open with" (WhatsApp, Files, browsers, email). Slides scroll like pages, with the same pinch zoom, go-to-slide pill, night mode and "where you stopped" memory.
+- **Faithful slides:** text with bullets and numbering, colours, fonts sizes, shapes, lines, pictures (with cropping), tables, grouped objects, SmartArt, backgrounds and layouts.
+- **Text view for slides:** a clean outline of every slide with its speaker notes.
+- A new "Slides" group in the archive, and files show "Slide x of N".
+- Viewing only: charts show as a placeholder, animations, transitions and media are not played, and old `.ppt` files are not supported.

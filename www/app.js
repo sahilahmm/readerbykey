@@ -21,14 +21,16 @@ const PDF_OPTIONS = {
 };
 
 const MAX_OPEN = 250 * 1024 * 1024; // refuse anything bigger than this, it would not fit in memory
-const DOC_EXT = /\.(pdf|docx|txt)$/i;
-const EXT = { pdf: ".pdf", docx: ".docx", txt: ".txt" };
+const DOC_EXT = /\.(pdf|docx|pptx|ppsx|txt)$/i;
+const EXT = { pdf: ".pdf", docx: ".docx", pptx: ".pptx", txt: ".txt" };
 const MIME = {
   pdf: "application/pdf",
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   txt: "text/plain",
 };
-const KIND_LABEL = { docx: "Word", txt: "Text" };
+const KIND_LABEL = { docx: "Word", pptx: "Slides", txt: "Text" };
+const paged = (kind) => kind === "pdf" || kind === "pptx"; // read page by page
 
 const $ = (id) => document.getElementById(id);
 const els = Object.fromEntries(
@@ -81,6 +83,8 @@ let exportMod = null;
 const loadExport = () => (exportMod ??= import("./export.js"));
 let docsMod = null;
 const loadDocs = () => (docsMod ??= import("./docs.js"));
+let pptxMod = null;
+const loadPptx = () => (pptxMod ??= import("./pptx.js"));
 
 /* ------------------------------------------------------------------ *
  *  Storage (IndexedDB): small "meta" rows + the file blobs
@@ -132,7 +136,7 @@ const deleteBoth = (id) =>
 
 // How far you are through a file, 0 to 1 (pages for a PDF, scroll position for Word and text)
 function progressOf(m) {
-  if (kindOf(m) === "pdf") return m.total > 1 ? clamp(((m.page || 1) - 1) / (m.total - 1), 0, 1) : 0;
+  if (paged(kindOf(m))) return m.total > 1 ? clamp(((m.page || 1) - 1) / (m.total - 1), 0, 1) : 0;
   return clamp(m.pct || 0, 0, 1);
 }
 // Recent, top to bottom: the most-read files first, new and unread ones at the bottom (newest last).
@@ -344,10 +348,10 @@ function cardFor(m) {
   const pct = Math.round((m.pct || 0) * 100);
   let progress = 0;
   let line = timeAgo(m.openedAt);
-  if (kind === "pdf") {
+  if (paged(kind)) {
     if (m.total) {
       progress = Math.round(((m.page || 1) / m.total) * 100);
-      line = `Page ${m.page || 1} of ${m.total} · ${line}`;
+      line = `${kind === "pptx" ? "Slides · Slide" : "Page"} ${m.page || 1} of ${m.total} · ${line}`;
     }
   } else {
     progress = pct;
@@ -386,9 +390,10 @@ function cardFor(m) {
 }
 
 const startOfDay = (t) => new Date(t).setHours(0, 0, 0, 0);
-const TYPE_ORDER = ["PDF", "Word", "Text"];
+const TYPE_LABEL = { pdf: "PDF", docx: "Word", pptx: "Slides", txt: "Text" };
+const TYPE_ORDER = ["PDF", "Word", "Slides", "Text"];
 function groupOf(m) {
-  if (state.group === "type") return { label: { pdf: "PDF", docx: "Word", txt: "Text" }[kindOf(m)], rank: TYPE_ORDER.indexOf({ pdf: "PDF", docx: "Word", txt: "Text" }[kindOf(m)]) };
+  if (state.group === "type") return { label: TYPE_LABEL[kindOf(m)], rank: TYPE_ORDER.indexOf(TYPE_LABEL[kindOf(m)]) };
   const t = m.archivedAt || m.openedAt;
   const days = Math.round((startOfDay(Date.now()) - startOfDay(t)) / 86_400_000);
   const d = new Date(t);
@@ -890,7 +895,13 @@ async function detectKind(blob, name, known) {
   const head = new Uint8Array(await blob.slice(0, 1100).arrayBuffer());
   const at = String.fromCharCode(...head).indexOf("%PDF-");
   if (at === 0 || (at > 0 && /\.pdf$/i.test(name))) return "pdf";
-  if (head[0] === 0x50 && head[1] === 0x4b) return "docx"; // a zip; the Word reader checks it
+  if (head[0] === 0x50 && head[1] === 0x4b) {
+    // a zip: go by the name, else by what the package holds; the readers check the rest
+    if (/\.(pptx|ppsx)$/i.test(name)) return "pptx";
+    if (/\.docx$/i.test(name)) return "docx";
+    const s = String.fromCharCode(...head);
+    return s.includes("ppt/") && !s.includes("word/") ? "pptx" : "docx";
+  }
   if (head[0] === 0xd0 && head[1] === 0xcf) throw unsupported(); // old .doc
   if (/\.pdf$/i.test(name)) return "pdf"; // let PDF.js say what is wrong with it
   const utf16 = (head[0] === 0xff && head[1] === 0xfe) || (head[0] === 0xfe && head[1] === 0xff);
@@ -911,7 +922,7 @@ async function openDocument({ id, name, blob, meta, persist }) {
   try {
     const kind = await detectKind(blob, name, meta.kind);
     name = withExt(name, kind);
-    const ok = kind === "pdf" ? await showPdf(gen, id, name, blob, meta) : await showTextDoc(gen, kind, id, name, blob, meta);
+    const ok = kind === "pdf" ? await showPdf(gen, id, name, blob, meta) : kind === "pptx" ? await showDeck(gen, id, name, blob, meta) : await showTextDoc(gen, kind, id, name, blob, meta);
     if (!ok || gen !== state.gen) return;
 
     if (persist) {
@@ -925,7 +936,7 @@ async function openDocument({ id, name, blob, meta, persist }) {
       closeDocument();
       await showHome();
       if (err && err.name === "PasswordException") return; // they cancelled the password box
-      toast(err && err.name === "Unsupported" ? "Reader opens PDF, Word (.docx) and text files." : "Couldn't open this file.");
+      toast(err && err.name === "Unsupported" ? "Reader opens PDF, Word, PowerPoint and text files." : "Couldn't open this file.");
     }
   } finally {
     els.loading.hidden = true;
@@ -985,6 +996,50 @@ async function showPdf(gen, id, name, blob, meta) {
   return true;
 }
 
+// A presentation is laid out like a PDF: one box per slide, drawn when it scrolls into view.
+async function showDeck(gen, id, name, blob, meta) {
+  const x = await loadPptx();
+  const deck = await x.readPptx(blob);
+  if (gen !== state.gen) {
+    deck.urls.forEach((u) => URL.revokeObjectURL(u));
+    return false;
+  }
+  state.deck = deck;
+  state.deckMod = x;
+  state.docUrls = deck.urls;
+  state.pdf = { numPages: deck.slides.length, destroy() {} };
+  state.open = true;
+  state.kind = "pptx";
+  state.id = id;
+  state.meta = { ...meta, id, name, kind: "pptx", total: deck.slides.length, openedAt: Date.now() };
+  state.zoom = clamp(meta.zoom || 1, MIN_ZOOM, MAX_ZOOM);
+  state.zgen++;
+
+  const ratio = deck.h / deck.w;
+  const frag = document.createDocumentFragment();
+  state.pages = [];
+  for (let n = 1; n <= deck.slides.length; n++) {
+    const el = document.createElement("div");
+    el.className = "page";
+    frag.append(el);
+    state.pages.push({ n, el, ratio, w: 0, h: 0, top: 0, canvas: null, task: null, busy: false, wanted: false, zgen: -1 });
+  }
+  els.pages.replaceChildren(frag);
+  els.title.textContent = stripExt(name);
+
+  els.home.hidden = true;
+  els.reader.hidden = false;
+  applyNight(state.night);
+
+  layout();
+  const start = { idx: clamp(meta.idx || 0, 0, deck.slides.length - 1), frac: meta.frac || 0 };
+  if (start.idx === 0 && start.frac <= 0) els.scroller.scrollTop = 0;
+  else scrollToAnchor(start, els.bar.offsetHeight + 4);
+  setChrome(true);
+  updateVisible();
+  return true;
+}
+
 // Word and text files open straight into the reflowing text view.
 async function showTextDoc(gen, kind, id, name, blob, meta) {
   const x = await loadDocs();
@@ -1036,6 +1091,7 @@ function closeDocument() {
   for (const p of state.pages) if (p.task) p.task.cancel();
   if (state.pdf) state.pdf.destroy();
   state.pdf = null;
+  state.deck = null;
   state.pages = [];
   state.id = null;
   state.open = false;
@@ -1209,6 +1265,23 @@ async function renderPage(p) {
   const gen = state.gen;
   const zgen = state.zgen;
   p.busy = true;
+  if (state.kind === "pptx") {
+    try {
+      const deck = state.deck;
+      const el = state.deckMod.drawSlide(deck.slides[p.n - 1], deck);
+      el.style.transform = `scale(${p.w / deck.w})`;
+      if (p.canvas) p.canvas.remove();
+      p.el.append(el);
+      p.canvas = el;
+      p.zgen = zgen;
+      state.deckMod.fitSlide(el);
+    } catch (err) {
+      console.warn("slide failed", p.n, err);
+    } finally {
+      p.busy = false;
+    }
+    return;
+  }
   try {
     const page = await state.pdf.getPage(p.n);
     if (gen !== state.gen || zgen !== state.zgen) return;
@@ -1245,8 +1318,10 @@ async function renderPage(p) {
 function release(p) {
   if (p.task) p.task.cancel();
   if (p.canvas) {
-    p.canvas.width = 0;
-    p.canvas.height = 0;
+    if (p.canvas.tagName === "CANVAS") {
+      p.canvas.width = 0;
+      p.canvas.height = 0;
+    }
     p.canvas.remove();
     p.canvas = null;
   }
@@ -1284,7 +1359,7 @@ els.textView.addEventListener(
   () => {
     onReadScroll();
     // Word and text files remember how far you read; PDFs in Text view do not
-    if (state.open && state.kind !== "pdf") {
+    if (state.open && !paged(state.kind)) {
       clearTimeout(saveTimer);
       saveTimer = setTimeout(() => saveProgress(false), 500);
     }
@@ -1294,7 +1369,7 @@ els.textView.addEventListener(
 
 function saveProgress(now) {
   if (!state.open || !state.meta) return;
-  if (state.kind === "pdf") {
+  if (paged(state.kind)) {
     if (!state.pdf || !state.pages.length || state.text) return;
     const a = getAnchor(0);
     Object.assign(state.meta, {
@@ -1520,6 +1595,13 @@ els.textBtn.addEventListener("click", async () => {
 
   state.scrollY = els.scroller.scrollTop;
   const gen = state.gen;
+  if (!state.textPages && state.kind === "pptx") {
+    const x = await loadDocs();
+    els.textView.replaceChildren();
+    x.renderBlocks(state.deckMod.outlineBlocks(state.deck), els.textView);
+    state.textPages = [[]];
+    state.textFromDeck = true;
+  }
   if (!state.textPages) {
     busy("Reading the text…");
     try {

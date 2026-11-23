@@ -48,7 +48,7 @@ async function inflateRaw(bytes, max) {
   return out;
 }
 
-async function openZip(blob) {
+export async function openZip(blob) {
   const buf = new Uint8Array(await blob.arrayBuffer());
   const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
 
@@ -96,7 +96,7 @@ async function openZip(blob) {
   };
 }
 
-async function readXml(zip, name) {
+export async function readXml(zip, name) {
   const bytes = await zip.get(name);
   if (!bytes) return null;
   const text = new TextDecoder().decode(bytes);

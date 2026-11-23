@@ -48,6 +48,12 @@ const extra = `
 			<key>LSItemContentTypes</key><array><string>org.openxmlformats.wordprocessingml.document</string></array>
 		</dict>
 		<dict>
+			<key>CFBundleTypeName</key><string>PowerPoint presentation</string>
+			<key>CFBundleTypeRole</key><string>Viewer</string>
+			<key>LSHandlerRank</key><string>Alternate</string>
+			<key>LSItemContentTypes</key><array><string>org.openxmlformats.presentationml.presentation</string><string>org.openxmlformats.presentationml.slideshow</string></array>
+		</dict>
+		<dict>
 			<key>CFBundleTypeName</key><string>Text document</string>
 			<key>CFBundleTypeRole</key><string>Viewer</string>
 			<key>LSHandlerRank</key><string>Alternate</string>

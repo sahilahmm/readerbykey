@@ -43,3 +43,7 @@ The release notes also list the SHA-256 of the signing certificate. It must stay
 ## Reporting a problem
 
 Open a private security advisory on this repository (Security tab > Report a vulnerability), or open an issue if it is not sensitive.
+
+## PowerPoint files (1.4)
+
+`.pptx`/`.ppsx` files are untrusted input. They are read by `www/pptx.js` with the same zip limits as Word files, XML containing `<!ENTITY` is refused, slides (1000), shapes (2500 per slide), pictures (300, 80 MB) are capped, and every shape is read inside a try/catch so one bad shape cannot stop the deck. Slides are built with DOM calls only (never `innerHTML`); colours are validated, only png/jpg/gif/webp/bmp/svg pictures are shown (as `<img>`, so SVG cannot run script), and links are limited to http(s), mailto and tel. Nothing in a presentation is ever fetched from the network.

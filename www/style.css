@@ -431,6 +431,10 @@ button { font: inherit; color: inherit; }
 
 .night .page { background: #0d0d0d; box-shadow: 0 0 0 1px var(--line); }
 .night .page canvas { filter: invert(1) hue-rotate(180deg); }
+.page .sl { position: absolute; left: 0; top: 0; transform-origin: 0 0; overflow: hidden; color: #000; user-select: text; }
+.page .sl img { -webkit-user-drag: none; }
+.page .sl a { text-decoration: underline; }
+.night .page .sl { filter: invert(1) hue-rotate(180deg); }
 
 .as-text .scroller { visibility: hidden; }
 .as-text .pill { display: none; }
@@ -565,3 +569,4 @@ button { font: inherit; color: inherit; }
 }
 
 #home.is-empty .shelf { flex: none; }
+.night .page .sl img { filter: invert(1) hue-rotate(180deg); }

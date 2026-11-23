@@ -17,7 +17,7 @@ Open that link on your phone, then install the file. Android asks you to allow i
 - **One pill, one hand.** The button at the bottom is "Open Document" until you have files, then it splits into **+** and **×**. Select a file and it becomes **Share / Rename / Archive**. Confirmations, "done" messages, Undo and password entry all appear inside the same pill.
 - Recent holds five files above the pill (no greeting once you have files; with none, a centred welcome): most-read on top, new ones at the bottom, pinned ones (up to 3) closest to your thumb. A sixth file moves the most-read one to the Archive for you, with Undo. The theme button and Archive chip sit just above the list; select a file and the theme button turns into Select all.
 - Long-press a file or tap its circle to select it, then slide your finger over more files to select them too.
-- **Open Document** takes PDF, Word (.docx) and text (.txt) files. Word and text files open straight into the reflowing text view and remember how far you read.
+- **Open Document** takes PDF, Word (.docx), PowerPoint (.pptx, .ppsx) and text (.txt) files. Word and text files open straight into the reflowing text view and remember how far you read.
 - **Select several files** (tap the circles, or Select all) to share, archive or remove them together. **Undo** appears after archive, restore, remove and rename.
 - **Share** a PDF as PDF or as Word (text only, no pictures or layout). Word and text files are shared as they are.
 - **Archive** keeps files without crowding Recent. It scrolls and groups by date or type. Open the Archive chip above the list to find or restore a file.
@@ -25,7 +25,8 @@ Open that link on your phone, then install the file. Android asks you to allow i
 - Smooth scrolling, pinch zoom, go to page, night pages, password-protected PDFs (the password is typed into the pill).
 - **Word files** keep their look: bold/italic/underline, colours, headings, lists, tables, pictures and links. A PDF shared as Word gets real headings and an A4 page.
 - **Dark mode is your choice**: the moon/sun button at the top left. It ignores the phone's setting.
-- Appears in Android's **Open with** list for PDF, Word and text files (WhatsApp, Files, browsers).
+- **PowerPoint files** open slide by slide like pages: text, shapes, pictures, tables, SmartArt and speaker notes (in Text view). Charts show as a placeholder, animations and media are not played, and old .ppt files are not supported. Viewing only, no PowerPoint export.
+- Appears in Android's **Open with** list for PDF, Word, PowerPoint and text files (WhatsApp, Files, browsers).
 - Remembers the page and zoom for each file.
 - Works fully offline with no internet permission. Your files never leave your phone unless you share them. See [SECURITY.md](SECURITY.md) and [PRIVACY.md](PRIVACY.md).
 - Look: Creamy Latte and Mocha Bean, blue accent in light mode, true black with cream in dark mode.

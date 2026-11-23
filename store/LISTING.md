@@ -1,13 +1,13 @@
 # Google Play listing: ready to paste
 
 **App name** (30 max): Reader by Key
-**Short description** (80 max): Simple offline reader for PDF, Word and text files. No ads, no account.
+**Short description** (80 max): Offline reader for PDF, Word, PowerPoint and text. No ads, no account. No ads, no account.
 **Category:** Books & Reference (or Productivity). **Tags:** document reader.
 **Contains ads:** No. **In-app purchases:** No.
 
 **Full description** (4000 max):
 
-Reader opens your PDF, Word (.docx) and text files and remembers where you stopped.
+Reader opens your PDF, Word (.docx), PowerPoint (.pptx) and text files and remembers where you stopped.
 
 - One pill at the bottom, built for one-handed use. Open, share, rename, archive and remove files from the same pill.
 - Word files keep their look: bold, italic, headings, lists, tables and pictures.
