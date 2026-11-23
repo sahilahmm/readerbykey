@@ -6,7 +6,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("./lib/pdf.worker.min.mjs", imp
  *  Setup
  * ------------------------------------------------------------------ */
 
-const MAX_RECENT = 10;
+const MAX_RECENT = 5; // Recent holds five files; the rest move to the Archive by themselves
+const MAX_PINS = 3;
 const MIN_ZOOM = 0.6;
 const MAX_ZOOM = 4;
 const MAX_PIXELS = 14_000_000; // cap per-page canvas size to protect memory
@@ -32,7 +33,7 @@ const KIND_LABEL = { docx: "Word", txt: "Text" };
 const $ = (id) => document.getElementById(id);
 const els = Object.fromEntries(
   [
-    "home", "reader", "list", "empty", "greeting", "archiveChip", "allChip", "dock", "fileInput",
+    "home", "reader", "shelf", "list", "empty", "greeting", "archiveChip", "allChip", "groupChip", "dock", "fileInput",
     "bOpen", "bAdd", "bRemove", "bShare", "bRename", "bArchive", "bDelete", "archiveLabel",
     "bPdf", "bWord", "bYes", "bNo", "bBack", "renameInput", "dockMsg",
     "bar", "title", "backBtn", "textBtn", "nightBtn", "zoomIn", "zoomOut",
@@ -47,6 +48,8 @@ const state = {
   live: [], // not archived, newest first
   shown: [], // what the list on screen holds
   view: "recent", // "recent" | "archive"
+  group: store("reader.group") === "type" ? "type" : "date", // how the Archive is grouped
+  moved: null, // files that were just moved to the Archive automatically
   sel: new Set(), // selected file ids
   mode: "open", // dock mode
   pending: null, // what the confirm button will do
@@ -128,10 +131,29 @@ const deleteBoth = (id) =>
     b.delete(id);
   });
 
-// keep the newest MAX_RECENT files; archived files are never trimmed
-async function trimRecent() {
-  const live = (await getAllMeta()).filter((m) => !m.archived).sort((a, b) => b.openedAt - a.openedAt);
-  for (const old of live.slice(MAX_RECENT)) await deleteBoth(old.id);
+// How far you are through a file, 0 to 1 (pages for a PDF, scroll position for Word and text)
+function progressOf(m) {
+  if (kindOf(m) === "pdf") return m.total > 1 ? clamp(((m.page || 1) - 1) / (m.total - 1), 0, 1) : 0;
+  return clamp(m.pct || 0, 0, 1);
+}
+// Recent, top to bottom: the most-read files first, new and unread ones at the bottom (newest last).
+// Pinned files follow the same pattern but sit below everything else.
+const byPattern = (a, b) => progressOf(b) - progressOf(a) || a.openedAt - b.openedAt;
+const recentOrder = (list) => [...list.filter((m) => !m.pinned).sort(byPattern), ...list.filter((m) => m.pinned).sort(byPattern)];
+
+// Recent never holds more than MAX_RECENT files. When it would, the most-read unpinned files
+// (never the one just opened or restored) move to the Archive. Returns the originals, for Undo.
+async function autoArchive(keep = []) {
+  const live = (await getAllMeta()).filter((m) => !m.archived);
+  const extra = live.length - MAX_RECENT;
+  if (extra <= 0) return [];
+  const pool = live.filter((m) => !m.pinned && !keep.includes(m.id)).sort((a, b) => progressOf(b) - progressOf(a) || a.openedAt - b.openedAt);
+  const moved = [];
+  for (const m of pool.slice(0, extra)) {
+    await putMeta({ ...m, archived: true, archivedAt: Date.now(), pinned: false });
+    moved.push(m);
+  }
+  return moved;
 }
 
 /* ------------------------------------------------------------------ *
@@ -351,8 +373,31 @@ function cardFor(m) {
   dot.setAttribute("aria-label", "Select");
   dot.innerHTML = CHECK;
 
-  li.append(main, dot);
+  if (!m.archived) {
+    const pin = document.createElement("button");
+    pin.type = "button";
+    pin.className = "pin";
+    pin.setAttribute("aria-label", m.pinned ? "Unpin" : "Pin to the bottom");
+    pin.setAttribute("aria-pressed", String(!!m.pinned));
+    pin.innerHTML = '<svg class="ic" viewBox="0 0 24 24"><path d="M9 4h6l-1 6 3 3H7l3-3-1-6zM12 13v7"/></svg>';
+    li.append(main, pin, dot);
+    li.classList.toggle("pinned", !!m.pinned);
+  } else li.append(main, dot);
   return li;
+}
+
+const startOfDay = (t) => new Date(t).setHours(0, 0, 0, 0);
+const TYPE_ORDER = ["PDF", "Word", "Text"];
+function groupOf(m) {
+  if (state.group === "type") return { label: { pdf: "PDF", docx: "Word", txt: "Text" }[kindOf(m)], rank: TYPE_ORDER.indexOf({ pdf: "PDF", docx: "Word", txt: "Text" }[kindOf(m)]) };
+  const t = m.archivedAt || m.openedAt;
+  const days = Math.round((startOfDay(Date.now()) - startOfDay(t)) / 86_400_000);
+  const d = new Date(t);
+  const now = new Date();
+  if (days <= 0) return { label: "Today", rank: 0 };
+  if (days < 7) return { label: "This week", rank: 1 };
+  if (d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()) return { label: "Earlier this month", rank: 2 };
+  return { label: d.toLocaleDateString(undefined, { month: "long", year: "numeric" }), rank: 3 + (now.getFullYear() * 12 + now.getMonth() - (d.getFullYear() * 12 + d.getMonth())) };
 }
 
 async function refreshHome(settle = true) {
@@ -363,34 +408,61 @@ async function refreshHome(settle = true) {
     /* storage unavailable: behave as empty */
   }
   state.all = all;
-  state.live = all.filter((m) => !m.archived);
-  const archived = all.filter((m) => m.archived);
+  state.live = recentOrder(all.filter((m) => !m.archived));
+  // newest archived first, then grouped
+  let archived = all.filter((m) => m.archived).sort((a, b) => (b.archivedAt || b.openedAt) - (a.archivedAt || a.openedAt));
+  archived = archived.map((m, i) => ({ m, i, g: groupOf(m) })).sort((x, y) => x.g.rank - y.g.rank || x.i - y.i);
+  state.archivedCount = archived.length;
   if (state.view === "archive" && !archived.length) state.view = "recent";
 
-  const shown = state.view === "archive" ? archived : state.live;
-  state.shown = shown;
-  for (const id of [...state.sel]) if (!shown.some((m) => m.id === id)) state.sel.delete(id);
+  const inArchive = state.view === "archive";
+  state.shown = inArchive ? archived.map((x) => x.m) : state.live;
+  for (const id of [...state.sel]) if (!state.shown.some((m) => m.id === id)) state.sel.delete(id);
 
-  els.list.replaceChildren(...shown.map(cardFor));
+  const rows = [];
+  if (inArchive) {
+    let last = null;
+    for (const { m, g } of archived) {
+      if (g.label !== last) {
+        const head = document.createElement("li");
+        head.className = "group-head";
+        head.textContent = g.label;
+        rows.push(head);
+        last = g.label;
+      }
+      rows.push(cardFor(m));
+    }
+  } else rows.push(...state.live.map(cardFor));
+  els.shelf.classList.toggle("archive", inArchive);
+  els.list.replaceChildren(...rows);
+  // Recent starts at the bottom (the thumb end); the Archive starts at the top
+  els.list.scrollTop = inArchive ? 0 : els.list.scrollHeight;
   markSel();
 
-  els.empty.hidden = shown.length > 0;
-  els.archiveChip.hidden = state.view === "archive" || !archived.length;
+  els.empty.hidden = state.shown.length > 0;
   els.archiveChip.textContent = `Archive · ${archived.length}`;
+  els.groupChip.textContent = state.group === "type" ? "Group: Type" : "Group: Date";
 
   setGreeting(false);
   if (settle) setMode(defaultMode());
 }
 
+// the tools row above the files: the theme button turns into Select all / Clear while you select
+function paintTools() {
+  const n = state.sel.size;
+  const canAll = n > 0 && state.shown.length > 1;
+  els.allChip.hidden = !canAll;
+  els.themeBtn.hidden = canAll;
+  els.allChip.textContent = n >= state.shown.length ? "Clear" : "Select all";
+  els.archiveChip.hidden = n > 0 || state.view === "archive" || !state.archivedCount;
+  els.groupChip.hidden = n > 0 || state.view !== "archive";
+}
+
 function markSel() {
-  for (const li of els.list.children) li.classList.toggle("sel", state.sel.has(li.dataset.id));
+  for (const li of els.list.children) if (li.dataset.id) li.classList.toggle("sel", state.sel.has(li.dataset.id));
   const ms = selMetas();
   els.archiveLabel.textContent = ms.length && ms.every((m) => m.archived) ? "Restore" : "Archive";
-
-  // "Select all" shows up once you are selecting and there is more than one file
-  const n = state.sel.size;
-  els.allChip.hidden = !(n > 0 && state.shown.length > 1);
-  els.allChip.textContent = n >= state.shown.length ? "Clear" : "Select all";
+  paintTools();
 }
 
 function toggleSelect(id, on) {
@@ -415,41 +487,105 @@ els.allChip.addEventListener("click", () => {
   setMode(defaultMode());
 });
 
+// told once, on the way back home, when files were moved to the Archive by themselves
+function announceMoved() {
+  const moved = state.moved;
+  state.moved = null;
+  if (!moved || !moved.length) return;
+  toast(`Moved ${moved.length} to Archive`, async () => {
+    for (const m of moved) await putMeta(m);
+    await refreshHome();
+  });
+}
+
 function showHome() {
   els.reader.hidden = true;
   els.home.hidden = false;
   state.sel.clear();
   state.view = "recent";
-  return refreshHome().then(() => setGreeting(true));
+  return refreshHome().then(() => {
+    setGreeting(true);
+    announceMoved();
+  });
 }
 
-/* --- tapping, selecting, long-press --- */
+/* --- tapping, selecting, long-press, drag to select --- */
 
 let press = null;
+let drag = null; // { want, last, moved }: sliding a finger over files selects (or unselects) them
+let suppressClick = false;
+
+function dragTo(e) {
+  const hit = document.elementFromPoint(e.clientX, e.clientY);
+  const card = hit && hit.closest && hit.closest(".card");
+  if (!card || !els.list.contains(card) || card.dataset.id === drag.last) return;
+  const cards = [...els.list.querySelectorAll(".card")];
+  const i0 = cards.findIndex((c) => c.dataset.id === drag.last);
+  const i1 = cards.indexOf(card);
+  if (i0 < 0 || i1 < 0) return;
+  for (let i = Math.min(i0, i1); i <= Math.max(i0, i1); i++) {
+    if (drag.want) state.sel.add(cards[i].dataset.id);
+    else state.sel.delete(cards[i].dataset.id);
+  }
+  drag.last = card.dataset.id;
+  drag.moved = true;
+  if (navigator.vibrate) navigator.vibrate(6);
+  markSel();
+  setMode(defaultMode());
+}
+
 els.list.addEventListener("pointerdown", (e) => {
   const card = e.target.closest(".card");
   press = null;
-  if (!card || e.target.closest(".dot")) return;
+  drag = null;
+  suppressClick = false;
+  if (!card) return;
+  if (e.target.closest(".pin")) return;
+  if (e.target.closest(".dot")) {
+    drag = { want: !state.sel.has(card.dataset.id), last: card.dataset.id, moved: false };
+    return;
+  }
   press = { x: e.clientX, y: e.clientY, fired: false };
   press.timer = setTimeout(() => {
     press.fired = true;
     if (navigator.vibrate) navigator.vibrate(12);
     toggleSelect(card.dataset.id, true);
+    drag = { want: true, last: card.dataset.id, moved: false };
   }, 450);
 });
 const cancelPress = () => press && clearTimeout(press.timer);
 els.list.addEventListener("pointermove", (e) => {
+  if (drag && (press ? press.fired : true)) return dragTo(e);
   if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 10) cancelPress();
 });
-els.list.addEventListener("pointerup", cancelPress);
-els.list.addEventListener("pointercancel", cancelPress);
+// once a drag-select has started, the page must not scroll under the finger
+els.list.addEventListener(
+  "touchmove",
+  (e) => {
+    if (drag && (press ? press.fired : true) && e.cancelable) e.preventDefault();
+  },
+  { passive: false }
+);
+const endPointer = () => {
+  cancelPress();
+  if (drag && drag.moved) suppressClick = true;
+  drag = null;
+};
+els.list.addEventListener("pointerup", endPointer);
+els.list.addEventListener("pointercancel", endPointer);
 els.list.addEventListener("contextmenu", (e) => e.preventDefault());
 
 els.list.addEventListener("click", (e) => {
+  if (suppressClick) {
+    suppressClick = false; // this click is just the end of a drag
+    return;
+  }
   if (press && press.fired) {
     press = null; // this click is just the end of a long-press
     return;
   }
+  const pin = e.target.closest(".pin");
+  if (pin) return togglePin(pin.closest(".card").dataset.id);
   const card = e.target.closest(".card");
   if (!card) {
     if (state.sel.size) clearSel();
@@ -468,7 +604,7 @@ els.bOpen.addEventListener("click", pickFile);
 els.bAdd.addEventListener("click", pickFile);
 
 els.bRemove.addEventListener("click", () => {
-  const last = state.live[0];
+  const last = state.live[state.live.length - 1];
   if (!last) return;
   state.pending = { type: "remove", ids: [last.id] };
   els.dockMsg.textContent = `Remove “${stripExt(last.name)}”?`;
@@ -523,17 +659,38 @@ els.bArchive.addEventListener("click", async () => {
   const ms = selMetas();
   if (!ms.length) return;
   const archiving = !ms[0].archived;
-  for (const m of ms) await putMeta({ ...m, archived: archiving });
+  for (const m of ms) await putMeta(archiving ? { ...m, archived: true, archivedAt: Date.now(), pinned: false } : { ...m, archived: false });
+  // restoring can overfill Recent: the most-read files then move over by themselves
+  const moved = archiving ? [] : await autoArchive(ms.map((m) => m.id));
   state.sel.clear();
   await refreshHome();
   const word = archiving ? "Archived" : "Restored";
-  toast(ms.length > 1 ? `${word} ${ms.length} files` : word, async () => {
-    for (const m of ms) {
-      const cur = state.all.find((x) => x.id === m.id);
-      if (cur) await putMeta({ ...cur, archived: !archiving });
-    }
+  const base = ms.length > 1 ? `${word} ${ms.length} files` : word;
+  toast(moved.length ? `${base} · ${moved.length} moved over` : base, async () => {
+    for (const m of [...ms, ...moved]) await putMeta(m);
     await refreshHome();
   });
+});
+
+async function togglePin(id) {
+  const m = state.all.find((x) => x.id === id);
+  if (!m) return;
+  if (!m.pinned && state.live.filter((x) => x.pinned).length >= MAX_PINS) {
+    toast(`You can pin up to ${MAX_PINS} files`);
+    return;
+  }
+  await putMeta({ ...m, pinned: !m.pinned });
+  await refreshHome();
+  toast(m.pinned ? "Unpinned" : "Pinned to the bottom", async () => {
+    await putMeta(m);
+    await refreshHome();
+  });
+}
+
+els.groupChip.addEventListener("click", () => {
+  state.group = state.group === "type" ? "date" : "type";
+  store("reader.group", state.group);
+  refreshHome(false);
 });
 
 els.bRename.addEventListener("click", () => {
@@ -753,7 +910,7 @@ async function openDocument({ id, name, blob, meta, persist }) {
 
     if (persist) {
       await putBoth(state.meta, blob);
-      await trimRecent();
+      state.moved = await autoArchive([id]);
     } else {
       await putMeta(state.meta);
     }
@@ -1437,4 +1594,11 @@ if (capApp && capApp.addListener) {
  * ------------------------------------------------------------------ */
 
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
-refreshHome();
+refreshHome()
+  .then(async () => {
+    // older versions kept up to ten files in Recent: tidy that up once
+    state.moved = await autoArchive();
+    if (state.moved.length) await refreshHome();
+    announceMoved();
+  })
+  .catch(() => {});

@@ -83,7 +83,7 @@ button { font: inherit; color: inherit; }
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: calc(var(--top) + 72px) 16px calc(var(--bottom) + 16px + var(--dock-h) + 36px);
+  padding: calc(var(--top) + 28px) 16px calc(var(--bottom) + 16px + var(--dock-h) + 36px);
 }
 
 #greeting {
@@ -99,9 +99,7 @@ button { font: inherit; color: inherit; }
 }
 
 .chip {
-  position: absolute;
-  top: calc(var(--top) + 16px);
-  right: 16px;
+  flex: none;
   min-height: 48px;
   padding: 0 18px;
   border: 1px solid var(--line);
@@ -111,23 +109,51 @@ button { font: inherit; color: inherit; }
   font-weight: 600;
 }
 .chip:active { opacity: 0.8; }
-#allChip { right: auto; left: 72px; }
-#themeBtn { right: auto; left: 16px; width: 48px; padding: 0; display: grid; place-items: center; }
+#themeBtn { width: 48px; padding: 0; display: grid; place-items: center; }
+#themeBtn[hidden], .chip[hidden] { display: none; }
 .chip .ic { width: 20px; height: 20px; }
 .sprite { position: absolute; } /* "Select all" sits opposite the Archive chip */
 
-/* the list sits at the bottom, newest file closest to the thumb */
-.list {
+/* the shelf sits right above the pill: the tools row first, then the files (thumb zone) */
+.shelf {
   flex: 1 1 0;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+.shelf.archive { justify-content: flex-start; }
+.tools {
+  flex: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  animation: rise 0.35s ease both;
+}
+
+.list {
+  flex: 0 1 auto;
+  min-height: 0;
   margin: 0;
-  padding: 8px 0 0;
+  padding: 0;
   list-style: none;
   display: flex;
-  flex-direction: column-reverse;
+  flex-direction: column;
   gap: 12px;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+}
+.shelf.archive .list { flex: 1 1 0; padding-bottom: 8px; }
+.group-head {
+  flex: none;
+  margin: 8px 0 -4px 8px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  opacity: 0.7;
 }
 
 .card {
@@ -147,7 +173,7 @@ button { font: inherit; color: inherit; }
 .card-main {
   display: block;
   width: 100%;
-  padding: 0 44px 0 0;
+  padding: 0 92px 0 0;
   border: 0;
   background: none;
   text-align: left;
@@ -165,6 +191,29 @@ button { font: inherit; color: inherit; }
 .card-meta { margin-top: 2px; font-size: 13px; opacity: 0.85; }
 .card-bar { margin-top: 12px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
 .card-bar i { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
+
+.dot,
+.pin {
+  touch-action: none;
+}
+.pin {
+  position: absolute;
+  top: calc(var(--card-pad) - 8px);
+  right: calc(var(--card-pad) - 8px + 44px);
+  width: 44px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  opacity: 0.55;
+}
+.pin .ic { width: 20px; height: 20px; }
+.card.pinned .pin { opacity: 1; color: var(--accent); }
+.card.pinned .pin .ic { fill: currentColor; }
+.shelf.archive .pin { display: none; }
+.shelf.archive .card-main { padding-right: 44px; }
 
 .dot {
   position: absolute;

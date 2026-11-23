@@ -23,19 +23,25 @@
       <g id="i-archive"><rect x="3" y="4" width="18" height="5" rx="2"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4"/></g>
       <g id="i-moon"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></g>
       <g id="i-sun"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6L7 7M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/></g>
+      <g id="i-pin"><path d="M9 4h6l-1 6 3 3H7l3-3-1-6zM12 13v7"/></g>
       <g id="i-text"><path d="M4 6h16M4 10h11M4 14h16M4 18h9"/></g>
     </defs>
   </svg>
 
   <!-- HOME -->
   <main id="home" class="screen">
-    <button id="themeBtn" class="chip round" type="button" aria-label="Switch to dark theme"><svg class="ic" viewBox="0 0 24 24"><use href="#i-moon"/></svg></button>
-    <button id="allChip" class="chip" type="button" hidden>Select all</button>
-    <button id="archiveChip" class="chip" type="button" hidden></button>
     <h1 id="greeting"></h1>
 
-    <ul id="list" class="list"></ul>
-    <p id="empty" class="empty">Nothing here yet</p>
+    <section id="shelf" class="shelf">
+      <div id="tools" class="tools">
+        <button id="themeBtn" class="chip round" type="button" aria-label="Switch to dark theme"><svg class="ic" viewBox="0 0 24 24"><use href="#i-moon"/></svg></button>
+        <button id="allChip" class="chip" type="button" hidden>Select all</button>
+        <button id="groupChip" class="chip" type="button" hidden>Group: Date</button>
+        <button id="archiveChip" class="chip" type="button" hidden></button>
+      </div>
+      <ul id="list" class="list"></ul>
+      <p id="empty" class="empty">Nothing here yet</p>
+    </section>
 
     <nav id="dock" class="dock" aria-live="polite">
       <div class="seg" data-s="open"><button id="bOpen" type="button"><svg class="ic" viewBox="0 0 24 24"><use href="#i-plus"/></svg><span>Open Document</span></button></div>
