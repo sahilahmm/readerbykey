@@ -169,29 +169,57 @@ const kindOf = (m) => m.kind || "pdf"; // files saved before Word/text support a
 const extOf = (m) => (m.name.match(DOC_EXT) || [EXT[kindOf(m)]])[0];
 // a name with no extension at all gets the right one; ".md" and friends are left alone
 const withExt = (name, kind) => (/\.[A-Za-z0-9]{1,5}$/.test(name) ? name : name + EXT[kind]);
-// Light haptics. Uses Capacitor's Haptics plugin (works on Android and iOS), else the browser's vibrate.
+// Haptics with some character: each kind of action has its own feel, built from short pulses.
+// Uses Capacitor's Haptics plugin (Android and iOS), else the browser's vibrate.
+const FEEL = {
+  tap: [["i", "LIGHT"]], // buttons, cards
+  soft: [["i", "LIGHT"], 28, ["i", "LIGHT"]], // opening the page jump
+  medium: [["i", "MEDIUM"]], // theme and night toggles
+  heavy: [["i", "HEAVY"]],
+  select: [["s"]], // ticking through a selection, zoom steps
+  tick: [["s"]], // page changes while scrolling
+  double: [["i", "MEDIUM"], 55, ["i", "LIGHT"]], // pin, zoom jump
+  ok: [["n", "SUCCESS"]], // done
+  warn: [["n", "WARNING"]], // confirm a removal
+};
+const FALLBACK = { tap: [8], soft: [8, 30, 8], medium: [14], heavy: [24], select: [5], tick: [4], double: [14, 40, 8], ok: [10, 40, 16], warn: [18, 50, 18] };
 let lastBuzz = 0;
 function buzz(kind = "tap") {
   const now = Date.now();
-  if (now - lastBuzz < 35) return;
+  if (now - lastBuzz < (kind === "tick" ? 90 : 35)) return;
   lastBuzz = now;
   try {
     const h = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Haptics;
-    if (h) {
-      if (kind === "select") h.selectionChanged();
-      else if (kind === "warn") h.notification({ type: "WARNING" });
-      else if (kind === "ok") h.notification({ type: "SUCCESS" });
-      else h.impact({ style: "LIGHT" });
-    } else if (navigator.vibrate) navigator.vibrate(kind === "warn" ? [12, 40, 12] : kind === "ok" ? 14 : 8);
+    if (!h) {
+      if (navigator.vibrate) navigator.vibrate(FALLBACK[kind] || FALLBACK.tap);
+      return;
+    }
+    let delay = 0;
+    for (const step of FEEL[kind] || FEEL.tap) {
+      if (typeof step === "number") {
+        delay += step;
+        continue;
+      }
+      const run = () => (step[0] === "i" ? h.impact({ style: step[1] }) : step[0] === "n" ? h.notification({ type: step[1] }) : h.selectionChanged());
+      if (delay) setTimeout(run, delay);
+      else run();
+    }
   } catch {
     /* haptics are a nicety */
   }
 }
-// every button, checkbox dot and pin gives a small tap
+// every button, checkbox dot, pin and card answers a touch, each with the feel that suits it
 document.addEventListener(
   "click",
   (e) => {
-    if (e.target.closest && e.target.closest("button, .dot, .pin, .card")) buzz("tap");
+    const t = e.target.closest && e.target.closest("button, .dot, .pin, .card");
+    if (!t) return;
+    if (t.matches("#themeBtn, #nightBtn, #textBtn")) buzz("medium");
+    else if (t.matches(".pin")) buzz("double");
+    else if (t.matches("#zoomIn, #zoomOut, .dot")) buzz("select");
+    else if (t.matches("#pill")) buzz("soft");
+    else if (t.matches("#bArchive, #bShare, #bRename, #bOpen, #bAdd")) buzz("ok");
+    else buzz("tap");
   },
   true
 );
@@ -1276,6 +1304,7 @@ function updateVisible() {
   pump();
 
   if (cur !== state.current || !els.pill.dataset.ready) {
+    if (els.pill.dataset.ready) buzz("tick");
     state.current = cur;
     els.pill.dataset.ready = "1";
     els.pill.textContent = `${cur + 1} / ${state.pages.length}`;
@@ -1554,14 +1583,14 @@ function watchDoubleTap(el, onDouble) {
 watchDoubleTap(els.scroller, (x, y) => {
   if (!state.pdf) return;
   const r = els.scroller.getBoundingClientRect();
-  buzz("tap");
+  buzz("double");
   zoomAt(state.zoom > 1.08 ? 1 : Math.min(MAX_ZOOM, 2.2), x - r.left, y - r.top);
 });
 watchDoubleTap(els.textView, () => {
   state.tz = state.tz > 1.2 ? 1 : 1.6;
   els.textView.style.setProperty("--tz", state.tz);
   store("reader.tz", String(state.tz));
-  buzz("tap");
+  buzz("double");
 });
 
 /* ------------------------------------------------------------------ *

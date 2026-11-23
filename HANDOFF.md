@@ -25,7 +25,7 @@ No `innerHTML` for document content; sanitise links (http/https/mailto/tel only)
 
 ## Done in 1.4.5
 1. Double-tap zoom: `watchDoubleTap` in `app.js`. Double tap zooms to 2.2x at the tapped spot, again returns to fit width; in Text view it switches text size normal/large. Toolbar toggling on tap is delayed 260 ms so a double tap does not flicker it.
-2. Haptics: `@capacitor/haptics` added; `buzz(kind)` in `app.js` (tap, select, warn, ok) with `navigator.vibrate` fallback. A capture-phase click listener gives every button, dot, pin and card a light tap; drag-select, delete confirmation and double tap have their own.
+2. Haptics: `@capacitor/haptics`; `buzz(kind)` in `app.js` has a `FEEL` table of multi-pulse patterns per kind (tap, soft, medium, heavy, select, tick, double, ok, warn) with a `navigator.vibrate` fallback; a capture-phase click listener picks the feel by element, page changes tick, double tap and pins use the two-step feel.
 3. Toolbar moved to the bottom (`.bar` uses `bottom`), page indicator `.pill` sits above it and drops down when the toolbar hides. Page and text padding adjusted; jump/resume offsets no longer depend on bar height.
 4. Word dark mode: `.textdoc.night .textview` now inverts the whole page like PDF night mode (Word files carry their own colours), images and links re-corrected.
 5. PowerPoint languages: paragraphs get explicit `dir` (rtl flag from the file), `lang` from run properties, physical l/r alignment (RTL with no alignment sits right), taller line height for Bengali/Arabic/Indic scripts, bullet side follows direction.
