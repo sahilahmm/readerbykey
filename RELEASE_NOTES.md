@@ -1,4 +1,4 @@
-### What's new in 1.4.1
+### What's new in 1.4.1.2
 
-- **Fix:** PowerPoint files shared from WhatsApp and other apps that give no file name (shown as "Document 23 Nov …") were refused as unsupported. Reader now looks inside the file to recognise slides, so they open.
-- Everything from 1.4 (PowerPoint viewing, Open with, Slides group) is unchanged.
+- **Fix: pictures on slides.** Pictures placed inside a slide's picture or content box (very common in lecture decks) were left blank. They now take their position from the slide layout and show up.
+- Pictures in formats a phone can't draw (EMF, WMF) now leave a labelled "Picture" box instead of an empty slide.

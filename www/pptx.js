@@ -327,7 +327,7 @@ export async function readPptx(blob) {
 
     /* placeholders: find the matching shape in the layout, then the master */
     const phKey = (sp) => {
-      const ph = c(c(c(sp, "nvSpPr"), "nvPr"), "ph");
+      const ph = c(c(c(sp, "nvSpPr") || c(sp, "nvPicPr"), "nvPr"), "ph");
       return ph ? { type: at(ph, "type") || "body", idx: at(ph, "idx") } : null;
     };
     const normType = (t) => (t === "ctrTitle" ? "title" : t === "subTitle" ? "body" : t === "obj" || t === "tbl" || t === "chart" || t === "pic" ? "body" : t);
@@ -626,12 +626,26 @@ export async function readPptx(blob) {
     }
 
     async function picture(pic, tf, layer, rl) {
-      const rect = rectOf(c(c(pic, "spPr"), "xfrm"), tf);
+      // a picture dropped into a placeholder has no position of its own: it takes the layout's
+      let rect = rectOf(c(c(pic, "spPr"), "xfrm"), tf);
+      if (!rect) {
+        const key = phKey(pic);
+        const lSp = key ? findPh(layout && layout.xml, key) : null;
+        const mSp = key ? findPh(master && master.xml, key) : null;
+        rect = (lSp && rectOf(xfrmOf(lSp), idTf)) || (mSp && rectOf(xfrmOf(mSp), idTf));
+      }
       if (!rect) return;
       const blip = c(c(pic, "blipFill"), "blip");
-      const rel = rl && rl.get(rattr(blip, "embed"));
+      const rel = rl && rl.get(rattr(blip, "embed")) || rl && rl.get(rattr(blip, "link"));
       const url = rel && !rel.external ? await imageUrl(rel.target) : null;
-      if (!url) return;
+      if (!url) {
+        // a format we can't draw (EMF, WMF, TIFF...): keep its place so the slide isn't silently empty
+        if (layer === "slide") {
+          items.push({ t: "note", ...rect, label: "Picture" });
+          count++;
+        }
+        return;
+      }
       const sr = c(c(pic, "blipFill"), "srcRect");
       const crop = { l: num(at(sr, "l")) / 100000, t: num(at(sr, "t")) / 100000, r: num(at(sr, "r")) / 100000, b: num(at(sr, "b")) / 100000 };
       const alt = at(c(c(pic, "nvPicPr"), "cNvPr"), "descr") || "";
