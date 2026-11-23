@@ -15,7 +15,7 @@ Open that link on your phone, then install the file. Android asks you to allow i
 ## What it does
 
 - **One pill, one hand.** The button at the bottom is "Open Document" until you have files, then it splits into **+** and **×**. Select a file and it becomes **Share / Rename / Archive**. Confirmations, "done" messages, Undo and password entry all appear inside the same pill.
-- Recent holds five files above the pill: most-read on top, new ones at the bottom, pinned ones (up to 3) closest to your thumb. A sixth file moves the most-read one to the Archive for you, with Undo. The theme button and Archive chip sit just above the list; select a file and the theme button turns into Select all.
+- Recent holds five files above the pill (no greeting once you have files; with none, a centred welcome): most-read on top, new ones at the bottom, pinned ones (up to 3) closest to your thumb. A sixth file moves the most-read one to the Archive for you, with Undo. The theme button and Archive chip sit just above the list; select a file and the theme button turns into Select all.
 - Long-press a file or tap its circle to select it, then slide your finger over more files to select them too.
 - **Open Document** takes PDF, Word (.docx) and text (.txt) files. Word and text files open straight into the reflowing text view and remember how far you read.
 - **Select several files** (tap the circles, or Select all) to share, archive or remove them together. **Undo** appears after archive, restore, remove and rename.

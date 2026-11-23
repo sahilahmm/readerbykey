@@ -33,7 +33,7 @@ const KIND_LABEL = { docx: "Word", txt: "Text" };
 const $ = (id) => document.getElementById(id);
 const els = Object.fromEntries(
   [
-    "home", "reader", "shelf", "list", "empty", "greeting", "archiveChip", "allChip", "groupChip", "dock", "fileInput",
+    "home", "reader", "shelf", "list", "empty", "hero", "greeting", "viewLabel", "archiveChip", "allChip", "groupChip", "dock", "fileInput",
     "bOpen", "bAdd", "bRemove", "bShare", "bRename", "bArchive", "bDelete", "archiveLabel",
     "bPdf", "bWord", "bYes", "bNo", "bBack", "renameInput", "dockMsg",
     "bar", "title", "backBtn", "textBtn", "nightBtn", "zoomIn", "zoomOut",
@@ -53,7 +53,6 @@ const state = {
   sel: new Set(), // selected file ids
   mode: "open", // dock mode
   pending: null, // what the confirm button will do
-  gcat: "", // greeting category
   undo: null, // what the pill's Undo button will do
   // reader
   open: false, // a document (of any kind) is open
@@ -309,20 +308,20 @@ function flash(text, ms = 1600) {
  *  Home
  * ------------------------------------------------------------------ */
 
-const GREETINGS = {
-  empty: ["Your reading, right here.", "Your reading, your pace."],
-  recent: ["Back to your page?", "Your next page awaits.", "Pick up where you left off.", "Your reading, your pace."],
-  archive: ["Saved for later.", "Your quiet shelf."],
-};
+// The greeting only shows when there is nothing saved yet, in the middle of the screen
+const GREETINGS = ["Your reading, right here.", "Your reading, your pace.", "Your next page awaits."];
 
-function setGreeting(force) {
-  const cat = state.view === "archive" ? "archive" : state.live.length ? "recent" : "empty";
-  if (!force && cat === state.gcat) return;
-  state.gcat = cat;
-  els.greeting.textContent = pick(GREETINGS[cat]);
-  els.greeting.style.animation = "none";
-  void els.greeting.offsetWidth;
-  els.greeting.style.animation = "";
+function setGreeting() {
+  const empty = !state.shown.length;
+  const wasHidden = els.hero.hidden;
+  els.hero.hidden = !empty;
+  els.home.classList.toggle("is-empty", empty);
+  if (empty && (wasHidden || !els.greeting.textContent)) {
+    els.greeting.textContent = pick(GREETINGS);
+    els.hero.style.animation = "none";
+    void els.hero.offsetWidth;
+    els.hero.style.animation = "";
+  }
 }
 
 const CHECK = '<svg class="ic" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7"/></svg>';
@@ -409,9 +408,13 @@ async function refreshHome(settle = true) {
   }
   state.all = all;
   state.live = recentOrder(all.filter((m) => !m.archived));
-  // newest archived first, then grouped
-  let archived = all.filter((m) => m.archived).sort((a, b) => (b.archivedAt || b.openedAt) - (a.archivedAt || a.openedAt));
-  archived = archived.map((m, i) => ({ m, i, g: groupOf(m) })).sort((x, y) => x.g.rank - y.g.rank || x.i - y.i);
+  // like Recent, the newest sits at the bottom, closest to the thumb; files are grouped
+  const when = (m) => m.archivedAt || m.openedAt;
+  const byType = state.group === "type";
+  const archived = all
+    .filter((m) => m.archived)
+    .map((m) => ({ m, g: groupOf(m) }))
+    .sort((x, y) => (byType ? x.g.rank - y.g.rank : y.g.rank - x.g.rank) || when(x.m) - when(y.m));
   state.archivedCount = archived.length;
   if (state.view === "archive" && !archived.length) state.view = "recent";
 
@@ -435,15 +438,15 @@ async function refreshHome(settle = true) {
   } else rows.push(...state.live.map(cardFor));
   els.shelf.classList.toggle("archive", inArchive);
   els.list.replaceChildren(...rows);
-  // Recent starts at the bottom (the thumb end); the Archive starts at the top
-  els.list.scrollTop = inArchive ? 0 : els.list.scrollHeight;
+  // both lists start at the bottom, the thumb end
+  els.list.scrollTop = els.list.scrollHeight;
   markSel();
 
-  els.empty.hidden = state.shown.length > 0;
   els.archiveChip.textContent = `Archive · ${archived.length}`;
+  els.viewLabel.textContent = `Archive · ${archived.length}`;
   els.groupChip.textContent = state.group === "type" ? "Group: Type" : "Group: Date";
 
-  setGreeting(false);
+  setGreeting();
   if (settle) setMode(defaultMode());
 }
 
@@ -456,6 +459,7 @@ function paintTools() {
   els.allChip.textContent = n >= state.shown.length ? "Clear" : "Select all";
   els.archiveChip.hidden = n > 0 || state.view === "archive" || !state.archivedCount;
   els.groupChip.hidden = n > 0 || state.view !== "archive";
+  els.viewLabel.hidden = state.view !== "archive";
 }
 
 function markSel() {
@@ -504,7 +508,6 @@ function showHome() {
   state.sel.clear();
   state.view = "recent";
   return refreshHome().then(() => {
-    setGreeting(true);
     announceMoved();
   });
 }
@@ -778,16 +781,19 @@ async function shareSelected(how) {
   }
 }
 
-els.archiveChip.addEventListener("click", () => {
-  state.view = "archive";
+// moving between Recent and the Archive: the shelf fades down, swaps, and rises back in
+async function switchView(view) {
+  if (state.view === view) return;
+  els.shelf.classList.add("leaving");
+  await new Promise((r) => setTimeout(r, 140));
+  state.view = view;
   state.sel.clear();
-  refreshHome();
-});
-els.bBack.addEventListener("click", () => {
-  state.view = "recent";
-  state.sel.clear();
-  refreshHome();
-});
+  await refreshHome();
+  els.shelf.classList.remove("leaving");
+  els.shelf.animate([{ opacity: 0, transform: "translateY(10px)" }, { opacity: 1, transform: "none" }], { duration: 260, easing: "ease-out" });
+}
+els.archiveChip.addEventListener("click", () => switchView("archive"));
+els.bBack.addEventListener("click", () => switchView("recent"));
 
 // lift the pill above the keyboard if the page isn't resized for it
 if (window.visualViewport) {
