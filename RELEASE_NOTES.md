@@ -1,4 +1,5 @@
-### What's new in 1.4.1.4
+### What's new in 1.4.1.5
 
-- **EMF pictures are now drawn properly.** Instead of only looking for a plain bitmap, Reader now draws the whole EMF picture: scanned or embedded photos (including the compressed kind newer Office uses) plus the text labels, lines and shapes on top of them.
-- Pictures that still can't be drawn keep a labelled box.
+- **Big slide decks open instantly.** Decks full of scanned pages (some are over 100 MB once unpacked) used to be unpacked all at once before anything showed. Reader now opens the first slide straight away and loads each slide's pictures only as you scroll to it, one at a time, so memory stays low.
+- **Scanned pictures and all their labels now show** on every slide, including very large EMF pictures.
+- A picture that can't be drawn keeps a labelled box instead of leaving a blank slide.

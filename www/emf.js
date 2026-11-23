@@ -19,7 +19,7 @@ export function dibToImage(bytes, off, bmiLen, bitsOff, bitsLen) {
   odv.setUint32(10, 14 + bmiLen, true);
   out.set(bytes.subarray(off, off + bmiLen), 14);
   out.set(bytes.subarray(bitsOff, bitsOff + bitsLen), 14 + bmiLen);
-  return { data: out, type: "image/bmp", area: w * h };
+  return { data: out, type: "image/bmp", area: w * h, w, h };
 }
 
 export function bitmapFromWmf(b) {
@@ -114,7 +114,14 @@ export async function renderEmf(b) {
     if (!img) return;
     let bmp;
     try {
-      bmp = await createImageBitmap(new Blob([img.data], { type: img.type }));
+      const blob = new Blob([img.data], { type: img.type });
+      const tw = Math.round(Math.abs(pt(dx + dw, dy)[0] - pt(dx, dy)[0])), th = Math.round(Math.abs(pt(dx, dy + dh)[1] - pt(dx, dy)[1]));
+      try {
+        // big scans are shrunk while decoding: far less memory and much faster
+        bmp = img.w && tw > 0 && th > 0 && (tw < img.w || th < img.h) ? await createImageBitmap(blob, { resizeWidth: Math.max(1, tw), resizeHeight: Math.max(1, th), resizeQuality: "medium" }) : await createImageBitmap(blob);
+      } catch {
+        bmp = await createImageBitmap(blob);
+      }
     } catch {
       return;
     }

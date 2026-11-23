@@ -15,7 +15,7 @@ const MAX_FILE = 150 * 1024 * 1024;
 const MAX_SLIDES = 1000;
 const MAX_ITEMS = 2500; // per slide
 const MAX_IMAGES = 300;
-const MAX_IMAGE_BYTES = 80 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 96 * 1024 * 1024; // one picture, unpacked
 
 const unsupported = (msg) => Object.assign(new Error(msg), { name: "Unsupported" });
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -158,44 +158,66 @@ export async function readPptx(blob) {
   const W = px(at(sz, "cx") || 9144000);
   const H = px(at(sz, "cy") || 6858000);
 
+  // Pictures are only read when a slide that shows them is drawn. Decks can hold hundreds of
+  // megabytes of pictures (scanned pages stored as EMF), so nothing is decoded up front.
   const urls = [];
-  const imageCache = new Map();
-  let imageBytes = 0;
-  async function imageUrl(path) {
-    if (!path) return null;
-    if (imageCache.has(path)) return imageCache.get(path);
-    let url = null;
+  const cache = new Map(); // path -> Promise<{ url, bytes } | null>
+  const KEEP_BYTES = 48 * 1024 * 1024;
+  let keptBytes = 0;
+  let chain = Promise.resolve(); // one picture is decoded at a time, so memory stays low
+  const TYPES = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", bmp: "image/bmp", svg: "image/svg+xml" };
+  const known = (path) => {
     const ext = (path.split(".").pop() || "").toLowerCase();
-    let type = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", bmp: "image/bmp", svg: "image/svg+xml" }[ext];
-    if (!type && (ext === "emf" || ext === "wmf") && zip.has(path) && urls.length < MAX_IMAGES && imageBytes + zip.size(path) <= MAX_IMAGE_BYTES) {
-      // old Office pictures: most are a photo or scan wrapped in a metafile, so lift the bitmap out
-      try {
-        const bytes = await zip.get(path, MAX_IMAGE_BYTES);
-        imageBytes += bytes.length;
+    return !!path && zip.has(path) && (ext in TYPES || ext === "emf" || ext === "wmf");
+  };
+  async function decode(path) {
+    const ext = (path.split(".").pop() || "").toLowerCase();
+    try {
+      const bytes = await zip.get(path, MAX_IMAGE_BYTES);
+      let data = bytes, type = TYPES[ext];
+      if (ext === "emf" || ext === "wmf") {
         const bmp = ext === "emf" ? await renderEmf(bytes) : bitmapFromWmf(bytes);
-        if (bmp) {
-          url = URL.createObjectURL(new Blob([bmp.data], { type: bmp.type }));
-          urls.push(url);
-        }
-      } catch {
-        /* leave it as a labelled box */
+        if (!bmp) return null;
+        data = bmp.data;
+        type = bmp.type;
       }
-      imageCache.set(path, url);
-      return url;
+      const url = URL.createObjectURL(new Blob([data], { type }));
+      urls.push(url);
+      return { url, bytes: data.length };
+    } catch (err) {
+      console.warn("picture failed", path, err);
+      return null;
     }
-    if (type && zip.has(path) && urls.length < MAX_IMAGES && imageBytes + zip.size(path) <= MAX_IMAGE_BYTES) {
-      try {
-        const bytes = await zip.get(path, MAX_IMAGE_BYTES);
-        imageBytes += bytes.length;
-        url = URL.createObjectURL(new Blob([bytes], { type }));
-        urls.push(url);
-      } catch {
-        /* skip a picture we can't read */
-      }
-    }
-    imageCache.set(path, url);
-    return url;
   }
+  function image(path) {
+    if (!path || !known(path)) return Promise.resolve(null);
+    let hit = cache.get(path);
+    if (hit) {
+      cache.delete(path); // most recently used goes last
+      cache.set(path, hit);
+      return hit.then((r) => r && r.url);
+    }
+    hit = chain.then(() => decode(path));
+    chain = hit.then(() => {}, () => {});
+    cache.set(path, hit);
+    hit.then((r) => {
+      if (!r) return;
+      keptBytes += r.bytes;
+      for (const [p, v] of cache) {
+        if (keptBytes <= KEEP_BYTES || p === path) break;
+        cache.delete(p);
+        v.then((o) => {
+          if (!o) return;
+          keptBytes -= o.bytes;
+          URL.revokeObjectURL(o.url);
+          const k = urls.indexOf(o.url);
+          if (k >= 0) urls.splice(k, 1);
+        });
+      }
+    });
+    return hit.then((r) => r && r.url);
+  }
+  const imageUrl = async (path) => (known(path) ? path : null); // slides keep the path, drawing loads it
 
   // layouts and masters are shared by many slides: read each once
   const masterCache = new Map();
@@ -668,7 +690,7 @@ export async function readPptx(blob) {
       const crop = { l: num(at(sr, "l")) / 100000, t: num(at(sr, "t")) / 100000, r: num(at(sr, "r")) / 100000, b: num(at(sr, "b")) / 100000 };
       const alt = at(c(c(pic, "nvPicPr"), "cNvPr"), "descr") || "";
       const geomEl = c(c(pic, "spPr"), "prstGeom");
-      items.push({ t: "pic", ...rect, url, crop, alt, round: geomEl && at(geomEl, "prst") === "ellipse" });
+      items.push({ t: "pic", ...rect, url, crop, label: `Picture (.${(rel.target.split(".").pop() || "").toLowerCase().slice(0, 5)})`, alt, round: geomEl && at(geomEl, "prst") === "ellipse" });
       count++;
       if (layer === "slide" && alt) model.paras.push({ alt });
     }
@@ -785,7 +807,7 @@ export async function readPptx(blob) {
     return model;
   }
 
-  return { w: W, h: H, slides, urls };
+  return { w: W, h: H, slides, urls, image };
 }
 
 function autoLabel(type, n) {
@@ -945,7 +967,14 @@ export function drawSlide(slide, deck) {
       box.style.overflow = "hidden";
       if (it.round) box.style.borderRadius = "50%";
       const img = document.createElement("img");
-      img.src = it.url;
+      deck.image(it.url).then((u) => {
+        if (u) img.src = u;
+        else {
+          img.remove();
+          box.style.cssText += "border:1px dashed rgba(128,128,128,.6);display:grid;place-items:center;color:rgba(128,128,128,.9);font:600 24px system-ui,sans-serif;";
+          box.textContent = it.label;
+        }
+      });
       img.alt = it.alt || "";
       img.draggable = false;
       const cw = 1 - it.crop.l - it.crop.r || 1, ch = 1 - it.crop.t - it.crop.b || 1;
@@ -966,7 +995,7 @@ export function drawSlide(slide, deck) {
       const min = Math.min(it.w, it.h);
       if (it.fill) {
         if (it.fill.css) geo.style.background = it.fill.css;
-        else geo.style.background = `url("${it.fill.img}") center/100% 100% no-repeat`;
+        else deck.image(it.fill.img).then((u) => { if (u) geo.style.background = `url("${u}") center/100% 100% no-repeat`; });
       }
       if (it.line) geo.style.border = `${pxs(it.line.w)} ${it.line.dash} ${it.line.color}`;
       if (g.prst === "ellipse") geo.style.borderRadius = "50%";

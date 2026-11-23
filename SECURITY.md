@@ -47,3 +47,5 @@ Open a private security advisory on this repository (Security tab > Report a vul
 ## PowerPoint files (1.4)
 
 `.pptx`/`.ppsx` files are untrusted input. They are read by `www/pptx.js` with the same zip limits as Word files, XML containing `<!ENTITY` is refused, slides (1000), shapes (2500 per slide), pictures (300, 80 MB) are capped, and every shape is read inside a try/catch so one bad shape cannot stop the deck. Slides are built with DOM calls only (never `innerHTML`); colours are validated, only png/jpg/gif/webp/bmp/svg pictures are shown (as `<img>`, so SVG cannot run script), and links are limited to http(s), mailto and tel. Nothing in a presentation is ever fetched from the network.
+
+Pictures inside a presentation (including EMF/WMF metafiles) are decoded lazily, one at a time, with a 96 MB limit per picture and about 48 MB of decoded pictures kept at once. Metafiles are drawn to a canvas by a small reader that only parses bytes; it never runs embedded code and never reaches the network.
