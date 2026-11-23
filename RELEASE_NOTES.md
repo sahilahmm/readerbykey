@@ -1,4 +1,4 @@
-### What's new in 1.4.1.3
+### What's new in 1.4.1.4
 
-- **Pictures saved in the old Office formats (EMF and WMF) now show.** Decks made from scans or pasted pictures often store them this way; Reader now lifts the photo out and draws it.
-- If a picture is in a format that still can't be drawn, its box now says which format it is, e.g. "Picture (.tiff)".
+- **EMF pictures are now drawn properly.** Instead of only looking for a plain bitmap, Reader now draws the whole EMF picture: scanned or embedded photos (including the compressed kind newer Office uses) plus the text labels, lines and shapes on top of them.
+- Pictures that still can't be drawn keep a labelled box.
