@@ -899,8 +899,14 @@ async function detectKind(blob, name, known) {
     // a zip: go by the name, else by what the package holds; the readers check the rest
     if (/\.(pptx|ppsx)$/i.test(name)) return "pptx";
     if (/\.docx$/i.test(name)) return "docx";
-    const s = String.fromCharCode(...head);
-    return s.includes("ppt/") && !s.includes("word/") ? "pptx" : "docx";
+    // no useful name (WhatsApp says "Document 23 Nov"): look inside the package
+    try {
+      const zip = await (await loadDocs()).openZip(blob);
+      if (zip.has("ppt/presentation.xml")) return "pptx";
+    } catch {
+      /* the Word reader will say what is wrong */
+    }
+    return "docx";
   }
   if (head[0] === 0xd0 && head[1] === 0xcf) throw unsupported(); // old .doc
   if (/\.pdf$/i.test(name)) return "pdf"; // let PDF.js say what is wrong with it
