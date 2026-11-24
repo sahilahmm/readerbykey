@@ -1,5 +1,6 @@
-### What's new in 1.4.5.6
+### What's new in 1.4.5.7
 
-- **No Archive button until you want it.** The Archive chip is gone from the home screen. When something is archived, the theme button shows a thin blue line on its right edge as a quiet reminder.
-- **Swipe makes the theme button become the Archive button.** Drag it right: it stretches into "Archive · N" under your thumb, ticks at the halfway point, and opens the Archive when you let go. Let go early and it shrinks back.
-- **Fixed: the theme button stopped working after a swipe.** A leftover tap guard swallowed the next real tap. It now only ignores the half second right after a drag.
+- **A one-time hint for the swipe.** The first time something is archived, the moon button stretches a little and springs back, and the pill says "Swipe the moon right to open your Archive". It plays once, and never again after you have swiped yourself.
+- **The Archive stays put.** Closing a document you opened from the Archive brings you back to the Archive, not to Recent.
+- **No swipe inside the Archive.** The moon is just the theme button there, and the leftover swipe-left gesture is gone. A stuck stretched button can no longer happen.
+- **Smooth when Recent empties.** Archiving your last Recent file now fades the list out and fades the logo and greeting in, instead of jumping.

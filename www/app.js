@@ -497,6 +497,14 @@ async function refreshHome(settle = true) {
     }
   } else rows.push(...state.live.map(cardFor));
   els.shelf.classList.toggle("archive", inArchive);
+  // the last Recent file just left: fade the list out first so the logo and greeting arrive smoothly
+  const nowEmpty = !state.shown.length;
+  const fading = state.homeWasEmpty === false && nowEmpty && !els.home.hidden && state.view !== "archive";
+  if (fading) {
+    els.shelf.classList.add("leaving");
+    await new Promise((r) => setTimeout(r, 170));
+  }
+  state.homeWasEmpty = nowEmpty;
   els.list.replaceChildren(...rows);
   // both lists start at the bottom, the thumb end
   els.list.scrollTop = els.list.scrollHeight;
@@ -507,7 +515,13 @@ async function refreshHome(settle = true) {
   els.groupChip.textContent = state.group === "type" ? "Group: Type" : "Group: Date";
 
   setGreeting();
+  if (fading) {
+    els.shelf.classList.remove("leaving");
+    els.shelf.animate([{ opacity: 0, transform: "translateY(8px)" }, { opacity: 1, transform: "none" }], { duration: 320, easing: "ease-out", delay: 120, fill: "backwards" });
+  }
+  resetThemeMorph();
   if (settle) setMode(defaultMode());
+  maybeNudge();
 }
 
 // the tools row above the files: the theme button turns into Select all / Clear while you select
@@ -569,7 +583,6 @@ function showHome() {
   els.reader.hidden = true;
   els.home.hidden = false;
   state.sel.clear();
-  state.view = "recent";
   return refreshHome().then(() => {
     announceMoved();
   });
@@ -863,7 +876,7 @@ els.archiveChip.addEventListener("click", () => switchView("archive"));
 const SCAN_READY = false; // the camera scanner arrives with 1.5; flip this when scan.js exists
 els.scanChip.hidden = !SCAN_READY;
 let themeDragUntil = 0; // a tap right after a drag is part of the drag, not a theme toggle
-(function swipeToArchive() {
+const swipe = (function swipeToArchive() {
   const btn = els.themeBtn;
   const FULL = 150; // px of drag for the button to become the full Archive button
   let start = null, dx = 0, moved = false;
@@ -879,6 +892,7 @@ let themeDragUntil = 0; // a tap right after a drag is part of the drag, not a t
     delete btn.dataset.armed;
   };
   btn.addEventListener("pointerdown", (e) => {
+    if (state.view === "archive") return; // the swipe only opens the Archive; inside it the button is just the theme button
     start = { x: e.clientX, y: e.clientY, id: e.pointerId };
     dx = 0;
     moved = false;
@@ -905,7 +919,10 @@ let themeDragUntil = 0; // a tap right after a drag is part of the drag, not a t
     const open = moved && dx / FULL > 0.55;
     const wasMoved = moved;
     start = null;
-    if (wasMoved) themeDragUntil = Date.now() + 450;
+    if (wasMoved) {
+      themeDragUntil = Date.now() + 450;
+      store("reader.swipeHint", "1");
+    }
     reset();
     if (open) {
       if (state.archivedCount && state.view !== "archive") {
@@ -916,17 +933,42 @@ let themeDragUntil = 0; // a tap right after a drag is part of the drag, not a t
   };
   btn.addEventListener("pointerup", end);
   btn.addEventListener("pointercancel", end);
-  // and back: a swipe to the left on the tools row leaves the Archive
-  let rowStart = null;
-  els.tools.addEventListener("touchstart", (e) => { rowStart = e.touches.length === 1 ? e.touches[0].clientX : null; }, { passive: true });
-  els.tools.addEventListener("touchend", (e) => {
-    if (rowStart === null) return;
-    const d = e.changedTouches[0].clientX - rowStart;
-    rowStart = null;
-    if (d < -70 && state.view === "archive") { buzz("double"); switchView("recent"); }
-  });
+  btn.addEventListener("lostpointercapture", end);
+  return { paint, reset };
 })();
 els.bBack.addEventListener("click", () => switchView("recent"));
+
+function resetThemeMorph() {
+  els.themeBtn.classList.remove("dragging", "morphed", "snap");
+  els.themeBtn.style.removeProperty("--p");
+  els.themeBtn.style.width = "";
+}
+
+// The first time something is archived, the theme button stretches a little and springs back,
+// with a line in the pill, so the swipe gets discovered. It only ever plays once.
+let nudgeTimer = 0;
+function maybeNudge() {
+  if (store("reader.swipeHint") || !state.archivedCount || state.view !== "recent" || els.home.hidden || state.sel.size) return;
+  clearTimeout(nudgeTimer);
+  nudgeTimer = setTimeout(() => {
+    if (store("reader.swipeHint") || state.view !== "recent" || els.home.hidden || state.sel.size) return;
+    store("reader.swipeHint", "1");
+    toast("Swipe the moon right to open your Archive");
+    const btn = els.themeBtn;
+    btn.classList.remove("snap");
+    btn.classList.add("morphed", "dragging");
+    const t0 = performance.now(), D = 1500;
+    const step = (now) => {
+      const x = Math.min((now - t0) / D, 1);
+      const p = 0.62 * Math.sin(Math.PI * x) ** 0.6; // out, hold a moment, back
+      swipe.paint(p);
+      if (x < 1) requestAnimationFrame(step);
+      else resetThemeMorph();
+    };
+    buzz("select");
+    requestAnimationFrame(step);
+  }, 900);
+}
 
 // lift the pill above the keyboard if the page isn't resized for it
 if (window.visualViewport) {
