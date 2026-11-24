@@ -577,8 +577,36 @@ button { font: inherit; color: inherit; }
 #home.is-empty .shelf { flex: none; }
 .night .page .sl img { filter: invert(1) hue-rotate(180deg); }
 
-/* the theme button can be dragged to the right to pull the Archive open */
-#themeBtn { touch-action: pan-y; position: relative; z-index: 1; }
+/* The theme button: a thin blue line on its right edge says "there is an Archive"; dragging it to
+   the right stretches it into the Archive button */
+#themeBtn { touch-action: pan-y; position: relative; z-index: 1; overflow: visible; }
+#themeBtn .ic { transition: opacity 0.1s linear; }
+.theme-label {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 600;
+  pointer-events: none;
+}
+#themeBtn.morphed { color: var(--ink); }
+#themeBtn.morphed .ic { opacity: calc(1 - var(--p, 0) * 2.2); }
+#themeBtn.morphed .theme-label { opacity: calc((var(--p, 0) - 0.3) * 2.2); }
 #themeBtn.dragging { transition: none; }
-#themeBtn.snap { transition: transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
-.tools.peek #archiveChip { opacity: 1; }
+#themeBtn.snap { transition: width 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.1); }
+#themeBtn.has-archive::after {
+  content: "";
+  position: absolute;
+  top: 14%;
+  bottom: 14%;
+  right: -10px;
+  width: 9px;
+  border-right: 3px solid var(--accent);
+  border-radius: 0 999px 999px 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+#themeBtn.morphed::after { opacity: 0; }

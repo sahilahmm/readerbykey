@@ -35,7 +35,7 @@ const paged = (kind) => kind === "pdf" || kind === "pptx"; // read page by page
 const $ = (id) => document.getElementById(id);
 const els = Object.fromEntries(
   [
-    "home", "reader", "shelf", "list", "empty", "hero", "greeting", "viewLabel", "tools", "archiveChip", "scanChip", "allChip", "groupChip", "dock", "fileInput",
+    "home", "reader", "shelf", "list", "empty", "hero", "greeting", "viewLabel", "tools", "themeLabel", "archiveChip", "scanChip", "allChip", "groupChip", "dock", "fileInput",
     "bOpen", "bAdd", "bRemove", "bShare", "bRename", "bArchive", "bDelete", "archiveLabel",
     "bPdf", "bWord", "bYes", "bNo", "bBack", "renameInput", "dockMsg",
     "bar", "title", "backBtn", "textBtn", "nightBtn", "zoomIn", "zoomOut",
@@ -517,7 +517,10 @@ function paintTools() {
   els.allChip.hidden = !canAll;
   els.themeBtn.hidden = canAll;
   els.allChip.textContent = n >= state.shown.length ? "Clear" : "Select all";
-  els.archiveChip.hidden = n > 0 || state.view === "archive" || !state.archivedCount;
+  // no Archive button until you swipe: the theme button wears a thin blue line when there is one
+  els.archiveChip.hidden = true;
+  els.themeBtn.classList.toggle("has-archive", !!state.archivedCount && state.view !== "archive");
+  els.themeLabel.textContent = `Archive · ${state.archivedCount}`;
   els.groupChip.hidden = n > 0 || state.view !== "archive";
   els.viewLabel.hidden = state.view !== "archive";
 }
@@ -855,13 +858,26 @@ async function switchView(view) {
 }
 els.archiveChip.addEventListener("click", () => switchView("archive"));
 
-// Swipe the theme button to the right to open the Archive (swipe the tools row left to come back).
-// The button follows your thumb, then springs back.
+// Swipe the theme button to the right: it stretches into the Archive button under your thumb.
+// Let go past the halfway point to open the Archive, otherwise it shrinks back into the theme button.
 const SCAN_READY = false; // the camera scanner arrives with 1.5; flip this when scan.js exists
 els.scanChip.hidden = !SCAN_READY;
+let themeDragUntil = 0; // a tap right after a drag is part of the drag, not a theme toggle
 (function swipeToArchive() {
   const btn = els.themeBtn;
+  const FULL = 150; // px of drag for the button to become the full Archive button
   let start = null, dx = 0, moved = false;
+  const paint = (p) => {
+    btn.style.setProperty("--p", p.toFixed(3));
+    btn.style.width = `${48 + p * 120}px`;
+  };
+  const reset = () => {
+    btn.classList.remove("dragging", "morphed");
+    btn.classList.add("snap");
+    btn.style.removeProperty("--p");
+    btn.style.width = "";
+    delete btn.dataset.armed;
+  };
   btn.addEventListener("pointerdown", (e) => {
     start = { x: e.clientX, y: e.clientY, id: e.pointerId };
     dx = 0;
@@ -871,38 +887,31 @@ els.scanChip.hidden = !SCAN_READY;
   btn.addEventListener("pointermove", (e) => {
     if (!start || e.pointerId !== start.id) return;
     dx = e.clientX - start.x;
-    if (!moved && Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(e.clientY - start.y)) {
+    if (!moved && dx > 8 && dx > Math.abs(e.clientY - start.y)) {
       moved = true;
       btn.setPointerCapture(e.pointerId);
-      btn.classList.add("dragging");
+      btn.classList.add("dragging", "morphed");
     }
-    if (moved) {
-      const shown = Math.max(0, Math.min(dx, 120));
-      btn.style.transform = `translateX(${shown}px)`;
-      if (shown > 60 && !btn.dataset.armed) {
-        btn.dataset.armed = "1";
-        buzz("select"); // you can feel the point where letting go opens it
-      } else if (shown <= 60) delete btn.dataset.armed;
-    }
+    if (!moved) return;
+    const p = Math.max(0, Math.min(dx / FULL, 1));
+    paint(p);
+    if (p > 0.55 && !btn.dataset.armed) {
+      btn.dataset.armed = "1";
+      buzz("select"); // you can feel the point where letting go opens it
+    } else if (p <= 0.55) delete btn.dataset.armed;
   });
-  const end = (e) => {
+  const end = () => {
     if (!start) return;
-    const open = moved && dx > 60;
+    const open = moved && dx / FULL > 0.55;
     const wasMoved = moved;
     start = null;
-    delete btn.dataset.armed;
-    btn.classList.remove("dragging");
-    btn.classList.add("snap");
-    btn.style.transform = "";
-    if (wasMoved) {
-      // the click that follows a drag must not flip the theme
-      btn.addEventListener("click", (c) => { c.stopImmediatePropagation(); c.preventDefault(); }, { capture: true, once: true });
-      if (open) {
-        if (state.archivedCount && state.view !== "archive") {
-          buzz("double");
-          switchView("archive");
-        } else flash("Archive is empty");
-      }
+    if (wasMoved) themeDragUntil = Date.now() + 450;
+    reset();
+    if (open) {
+      if (state.archivedCount && state.view !== "archive") {
+        buzz("double");
+        switchView("archive");
+      } else flash("Archive is empty");
     }
   };
   btn.addEventListener("pointerup", end);
@@ -1694,6 +1703,7 @@ function paintTheme(save) {
   if (save) store("reader.theme", dark ? "dark" : "light");
 }
 els.themeBtn.addEventListener("click", () => {
+  if (Date.now() < themeDragUntil) return;
   const next = currentTheme() === "dark" ? "light" : "dark";
   document.documentElement.setAttribute("data-theme", next);
   paintTheme(true);

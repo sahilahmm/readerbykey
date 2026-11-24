@@ -1,5 +1,5 @@
-### What's new in 1.4.5.5
+### What's new in 1.4.5.6
 
-- **Barebone logo.** The empty home screen now shows the Barebone mark above the greeting and "Nothing here yet", all centred. It recolours itself with the theme (mocha on latte, cream on black).
-- **Swipe to open the Archive.** Drag the theme button to the right: it follows your thumb, ticks when you reach the point where letting go opens the Archive, then springs back. With an empty archive it tells you so. Swipe left on the tools row to come back to Recent. A tap still switches the theme.
-- Room for the 1.5 Scan button beside Archive is prepared but stays hidden until the scanner ships.
+- **No Archive button until you want it.** The Archive chip is gone from the home screen. When something is archived, the theme button shows a thin blue line on its right edge as a quiet reminder.
+- **Swipe makes the theme button become the Archive button.** Drag it right: it stretches into "Archive · N" under your thumb, ticks at the halfway point, and opens the Archive when you let go. Let go early and it shrinks back.
+- **Fixed: the theme button stopped working after a swipe.** A leftover tap guard swallowed the next real tap. It now only ignores the half second right after a drag.
