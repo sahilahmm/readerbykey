@@ -35,7 +35,7 @@ const paged = (kind) => kind === "pdf" || kind === "pptx"; // read page by page
 const $ = (id) => document.getElementById(id);
 const els = Object.fromEntries(
   [
-    "home", "reader", "shelf", "list", "empty", "hero", "greeting", "viewLabel", "archiveChip", "allChip", "groupChip", "dock", "fileInput",
+    "home", "reader", "shelf", "list", "empty", "hero", "greeting", "viewLabel", "tools", "archiveChip", "scanChip", "allChip", "groupChip", "dock", "fileInput",
     "bOpen", "bAdd", "bRemove", "bShare", "bRename", "bArchive", "bDelete", "archiveLabel",
     "bPdf", "bWord", "bYes", "bNo", "bBack", "renameInput", "dockMsg",
     "bar", "title", "backBtn", "textBtn", "nightBtn", "zoomIn", "zoomOut",
@@ -854,6 +854,69 @@ async function switchView(view) {
   els.shelf.animate([{ opacity: 0, transform: "translateY(10px)" }, { opacity: 1, transform: "none" }], { duration: 260, easing: "ease-out" });
 }
 els.archiveChip.addEventListener("click", () => switchView("archive"));
+
+// Swipe the theme button to the right to open the Archive (swipe the tools row left to come back).
+// The button follows your thumb, then springs back.
+const SCAN_READY = false; // the camera scanner arrives with 1.5; flip this when scan.js exists
+els.scanChip.hidden = !SCAN_READY;
+(function swipeToArchive() {
+  const btn = els.themeBtn;
+  let start = null, dx = 0, moved = false;
+  btn.addEventListener("pointerdown", (e) => {
+    start = { x: e.clientX, y: e.clientY, id: e.pointerId };
+    dx = 0;
+    moved = false;
+    btn.classList.remove("snap");
+  });
+  btn.addEventListener("pointermove", (e) => {
+    if (!start || e.pointerId !== start.id) return;
+    dx = e.clientX - start.x;
+    if (!moved && Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(e.clientY - start.y)) {
+      moved = true;
+      btn.setPointerCapture(e.pointerId);
+      btn.classList.add("dragging");
+    }
+    if (moved) {
+      const shown = Math.max(0, Math.min(dx, 120));
+      btn.style.transform = `translateX(${shown}px)`;
+      if (shown > 60 && !btn.dataset.armed) {
+        btn.dataset.armed = "1";
+        buzz("select"); // you can feel the point where letting go opens it
+      } else if (shown <= 60) delete btn.dataset.armed;
+    }
+  });
+  const end = (e) => {
+    if (!start) return;
+    const open = moved && dx > 60;
+    const wasMoved = moved;
+    start = null;
+    delete btn.dataset.armed;
+    btn.classList.remove("dragging");
+    btn.classList.add("snap");
+    btn.style.transform = "";
+    if (wasMoved) {
+      // the click that follows a drag must not flip the theme
+      btn.addEventListener("click", (c) => { c.stopImmediatePropagation(); c.preventDefault(); }, { capture: true, once: true });
+      if (open) {
+        if (state.archivedCount && state.view !== "archive") {
+          buzz("double");
+          switchView("archive");
+        } else flash("Archive is empty");
+      }
+    }
+  };
+  btn.addEventListener("pointerup", end);
+  btn.addEventListener("pointercancel", end);
+  // and back: a swipe to the left on the tools row leaves the Archive
+  let rowStart = null;
+  els.tools.addEventListener("touchstart", (e) => { rowStart = e.touches.length === 1 ? e.touches[0].clientX : null; }, { passive: true });
+  els.tools.addEventListener("touchend", (e) => {
+    if (rowStart === null) return;
+    const d = e.changedTouches[0].clientX - rowStart;
+    rowStart = null;
+    if (d < -70 && state.view === "archive") { buzz("double"); switchView("recent"); }
+  });
+})();
 els.bBack.addEventListener("click", () => switchView("recent"));
 
 // lift the pill above the keyboard if the page isn't resized for it

@@ -45,3 +45,9 @@ Goal: scan any paper document with the camera, tidy it, and save it as PDF or Wo
 - Save into the same library (IndexedDB `meta`/`blobs`) so scans appear on the home screen, kind `pdf` or `docx`.
 - Paperwork when camera is added: update `store/DATA_SAFETY.md` (camera used on device only, nothing collected), `PRIVACY.md`, `docs/privacy.html`, `COMPLIANCE.md`, `store/APPLE.md`.
 - UI: a scan entry in the home pill ("Scan"), full-screen camera with capture button at the bottom (thumb zone), page strip, crop screen, Save as PDF / Word.
+
+## Added in 1.4.5.1 to 1.4.5.5
+- 1.4.5.1 premium haptics (`FEEL` table in `app.js`).
+- 1.4.5.5 logo: hand-drawn Barebone mark traced to `logo.svg` (OpenCV contours + Catmull-Rom curves, single path, `currentColor`), inlined in `index.html` as `.logo` inside `#hero`, above `#greeting`.
+- 1.4.5.5 swipe: `swipeToArchive()` in `app.js`: pointer-drag on `#themeBtn` (>60 px right = `switchView("archive")`, click after a drag is swallowed); swipe left on `#tools` in the Archive returns to Recent.
+- `#scanChip` and `SCAN_READY` (false) in `app.js` are the slot for the 1.5 scanner chip beside Archive. Sah wants Scan first in the empty state, and Scan beside Archive once files exist. Not shipped yet.

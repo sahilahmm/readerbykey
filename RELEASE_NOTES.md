@@ -1,3 +1,5 @@
-### What's new in 1.4.5.1
+### What's new in 1.4.5.5
 
-- **Premium haptics.** Every kind of action now has its own feel: a crisp light tap for buttons and cards, a firmer pulse for theme, night and text toggles, a soft double pulse for the page jump, a two-step pulse for pins and double-tap zoom, a gentle tick for each page you scroll past, a success buzz for done actions and a sharper warning when you confirm a removal.
+- **Barebone logo.** The empty home screen now shows the Barebone mark above the greeting and "Nothing here yet", all centred. It recolours itself with the theme (mocha on latte, cream on black).
+- **Swipe to open the Archive.** Drag the theme button to the right: it follows your thumb, ticks when you reach the point where letting go opens the Archive, then springs back. With an empty archive it tells you so. Swipe left on the tools row to come back to Recent. A tap still switches the theme.
+- Room for the 1.5 Scan button beside Archive is prepared but stays hidden until the scanner ships.

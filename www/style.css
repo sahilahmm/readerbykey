@@ -98,6 +98,8 @@ button { font: inherit; color: inherit; }
   animation: rise 0.5s ease both;
 }
 .hero[hidden] { display: none; }
+.logo { margin: 0 0 22px; }
+.logo-mark { display: block; width: clamp(72px, 22vw, 96px); height: auto; }
 #greeting {
   margin: 0 0 10px;
   max-width: 11em;
@@ -574,3 +576,9 @@ button { font: inherit; color: inherit; }
 
 #home.is-empty .shelf { flex: none; }
 .night .page .sl img { filter: invert(1) hue-rotate(180deg); }
+
+/* the theme button can be dragged to the right to pull the Archive open */
+#themeBtn { touch-action: pan-y; position: relative; z-index: 1; }
+#themeBtn.dragging { transition: none; }
+#themeBtn.snap { transition: transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
+.tools.peek #archiveChip { opacity: 1; }
