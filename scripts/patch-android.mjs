@@ -175,7 +175,7 @@ const name = process.env.VERSION_NAME || "1.0";
 let gradle = readFileSync(gradleFile, "utf8");
 gradle = gradle.replace(/versionCode \d+/, `versionCode ${code}`).replace(/versionName "[^"]*"/, `versionName "${name}"`);
 // 7. shrink the app: R8 removes unused Java/Kotlin code and unused resources (the biggest size win), with keep rules for Capacitor's plugin bridge
-must(/minifyEnabled false/.test(gradle), "minifyEnabled not found");
+if (!/minifyEnabled false/.test(gradle)) throw new Error("minifyEnabled not found in app/build.gradle");
 gradle = gradle.replace("minifyEnabled false", "minifyEnabled true\n            shrinkResources true");
 writeFileSync(gradleFile, gradle);
 const rules = join(root, "android", "app", "proguard-rules.pro");
