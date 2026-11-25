@@ -9,6 +9,6 @@
 
 Why "files and docs" is not "collected": Google counts data as collected only when it is transmitted off the device. Reader reads the files you pick locally and never sends them anywhere. Sharing happens only when you pick another app in Android's share sheet, which is a user-initiated action and is exempt.
 
-Permissions declared: **none**. Sensitive permission declarations (SMS, call log, all-files access, accessibility, VPN, etc.): none needed.
+Permissions declared: **CAMERA** only (document scanner; images stay on the device, nothing collected or shared). No internet permission. Sensitive permission declarations (SMS, call log, all-files access, accessibility, VPN, etc.): none needed.
 Foreground service, advertising ID, health connect: not used. Advertising ID declaration answer: **No**.
 Security practices section: tick "Data is encrypted in transit" only if the form requires an answer; otherwise leave "No data collected". Tick "You can request that data be deleted" is not required.

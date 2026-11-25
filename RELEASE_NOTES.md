@@ -1,6 +1,6 @@
-### What's new in 1.4.5.7
+### What's new in 1.5
 
-- **A one-time hint for the swipe.** The first time something is archived, the moon button stretches a little and springs back, and the pill says "Swipe the moon right to open your Archive". It plays once, and never again after you have swiped yourself.
-- **The Archive stays put.** Closing a document you opened from the Archive brings you back to the Archive, not to Recent.
-- **No swipe inside the Archive.** The moon is just the theme button there, and the leftover swipe-left gesture is gone. A stuck stretched button can no longer happen.
-- **Smooth when Recent empties.** Archiving your last Recent file now fades the list out and fades the logo and greeting in, instead of jumping.
+- **Scanner.** Tap Scan on the home screen, point the camera at a page, and Reader finds the edges, straightens it and cleans up the lighting. Drag the corners if it missed, choose Original, Document or B&W, add as many pages as you need (up to 30), then save as a PDF or a Word file. The result opens straight away and goes into your library.
+- **Photos too.** Pick pictures from your gallery, or use your camera app if the live camera isn't available.
+- **Private.** The camera is the only permission Reader asks for. Everything is processed on your phone.
+- Word scans hold the page pictures (no text recognition yet).

@@ -27,6 +27,10 @@ const plistPath = join(app, "Info.plist");
 let plist = readFileSync(plistPath, "utf8");
 plist = plist.replace("<string>armv7</string>", "<string>arm64</string>");
 const extra = `
+	<key>NSCameraUsageDescription</key>
+	<string>Reader uses the camera only to scan documents on your device. Photos are never uploaded.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Reader reads the photos you choose to turn them into a document. Nothing leaves your device.</string>
 	<key>UIUserInterfaceStyle</key>
 	<string>Light</string>
 	<key>ITSAppUsesNonExemptEncryption</key>

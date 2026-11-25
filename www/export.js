@@ -160,6 +160,71 @@ export function buildDocx(pages, title = "Document") {
   return zip(files);
 }
 
+// Scanned pages as a Word file: one picture per page. images: [{ jpeg: Uint8Array, w, h }] (pixels)
+export function buildImageDocx(images, title = "Scan") {
+  const MAXW = 6645910, MAXH = 9777730; // text area of an A4 page with 0.5 inch margins, in EMU
+  const body = images
+    .map((im, i) => {
+      const k = Math.min(MAXW / im.w, MAXH / im.h);
+      const cx = Math.round(im.w * k), cy = Math.round(im.h * k);
+      const n = i + 1;
+      return (
+        '<w:p><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/><w:jc w:val="center"/></w:pPr><w:r><w:drawing>' +
+        `<wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="${n}" name="Page ${n}" descr="Scanned page ${n}"/>` +
+        '<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
+        `<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="${n}" name="page${n}.jpg"/><pic:cNvPicPr/></pic:nvPicPr>` +
+        `<pic:blipFill><a:blip r:embed="rIdImg${n}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>` +
+        `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic>` +
+        "</a:graphicData></a:graphic></wp:inline></w:drawing></w:r>" +
+        (i < images.length - 1 ? '<w:r><w:br w:type="page"/></w:r>' : "") +
+        "</w:p>"
+      );
+    })
+    .join("");
+  const now = new Date().toISOString().replace(/\.\d+Z$/, "Z");
+  const rels = images
+    .map((_, i) => `<Relationship Id="rIdImg${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/page${i + 1}.jpg"/>`)
+    .join("");
+  const files = {
+    "[Content_Types].xml":
+      XML_HEAD +
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+      '<Default Extension="xml" ContentType="application/xml"/><Default Extension="jpg" ContentType="image/jpeg"/>' +
+      '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
+      '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>' +
+      '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>' +
+      "</Types>",
+    "_rels/.rels":
+      XML_HEAD +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>' +
+      '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>' +
+      "</Relationships>",
+    "word/_rels/document.xml.rels":
+      XML_HEAD +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
+      rels +
+      "</Relationships>",
+    "word/styles.xml": STYLES,
+    "word/document.xml":
+      XML_HEAD +
+      `<w:document ${NS} xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><w:body>` +
+      body +
+      '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720" w:header="360" w:footer="360" w:gutter="0"/></w:sectPr>' +
+      "</w:body></w:document>",
+    "docProps/core.xml":
+      XML_HEAD +
+      '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">' +
+      `<dc:title>${esc(title)}</dc:title><dc:creator>Reader by Key</dc:creator>` +
+      `<dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified>` +
+      "</cp:coreProperties>",
+  };
+  images.forEach((im, i) => (files[`word/media/page${i + 1}.jpg`] = im.jpeg));
+  return zip(files);
+}
+
 /* ---------- Tiny zip writer (no compression) ---------- */
 
 const CRC = new Uint32Array(256).map((_, n) => {
@@ -181,7 +246,7 @@ function zip(files) {
 
   for (const [name, text] of Object.entries(files)) {
     const nameBytes = enc.encode(name);
-    const data = enc.encode(text);
+    const data = typeof text === "string" ? enc.encode(text) : text; // text or raw bytes (pictures)
     const crc = crc32(data);
 
     const local = new DataView(new ArrayBuffer(30));

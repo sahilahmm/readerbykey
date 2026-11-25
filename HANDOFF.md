@@ -37,14 +37,13 @@ PowerPoint viewing (shapes, text, tables, pictures, SmartArt, notes outline), Op
 ## Known limits
 Charts show as a labelled box; animations/transitions/media not played; old binary `.ppt` unsupported; fonts approximated; iOS builds untested on a real device.
 
-## Next: 1.5 Scanner (not started)
-Goal: scan any paper document with the camera, tidy it, and save it as PDF or Word. Plan:
-- Camera: `getUserMedia` inside the WebView (needs `CAMERA` permission in `patch-android.mjs` and `NSCameraUsageDescription` in `patch-ios.mjs`), or `@capacitor/camera`. Prefer one with no network and no extra dependencies.
-- Pipeline in a new lazy module `www/scan.js`: capture frame, find the page edges (simple edge/contour detection on a downscaled canvas, let the user drag four corners), perspective-correct onto a canvas, enhance (grayscale/contrast "document" mode, colour mode), multiple pages per scan.
-- PDF output: write a small PDF generator (JPEG per page, A4/auto size) so no library is needed. Word output: reuse `export.js` docx builder and embed page images (add image support there), optional OCR is out of scope offline unless a small WASM OCR is added.
-- Save into the same library (IndexedDB `meta`/`blobs`) so scans appear on the home screen, kind `pdf` or `docx`.
-- Paperwork when camera is added: update `store/DATA_SAFETY.md` (camera used on device only, nothing collected), `PRIVACY.md`, `docs/privacy.html`, `COMPLIANCE.md`, `store/APPLE.md`.
-- UI: a scan entry in the home pill ("Scan"), full-screen camera with capture button at the bottom (thumb zone), page strip, crop screen, Save as PDF / Word.
+## Done in 1.5: Scanner
+- `www/scan.js`: `detectCorners`, `warp` (homography), `rotate`, `enhance` (orig/color/doc/bw), `toJpeg`, `makePdf` (hand-written PDF, one JPEG per page).
+- `www/scan-ui.js`: `createScanner(...)`, lazy-loaded from `openScanner()` in `app.js`; modes camera/edit/pages, draggable corners, look chips (`reader.scanLook`), up to 30 pages, save PDF or Word, then `openBlob` with id `scan|<time>`. Android back handled via `scanner.back()`. Gallery and `capture` inputs are the fallback when `getUserMedia` fails.
+- `export.js` `buildImageDocx` (Word = page pictures, no OCR). `SCAN_READY = true`; `#scanChip` shows when Recent is empty or beside the pill.
+- Native: CAMERA permission + optional camera features in `patch-android.mjs`; `NSCameraUsageDescription`/`NSPhotoLibraryUsageDescription` in `patch-ios.mjs`. Privacy docs updated.
+- Tested in Chromium with a fake camera and a tilted test photo. NOT tested on a real phone: Android WebView camera prompt, iOS WKWebView getUserMedia.
+- Ideas next: OCR (searchable PDF / editable Word), auto-capture, ID-card mode.
 
 ## Added in 1.4.5.1 to 1.4.5.5
 - 1.4.5.1 premium haptics (`FEEL` table in `app.js`).

@@ -536,6 +536,7 @@ function paintTools() {
   els.themeBtn.classList.toggle("has-archive", !!state.archivedCount && state.view !== "archive");
   els.themeLabel.textContent = `Archive · ${state.archivedCount}`;
   els.groupChip.hidden = n > 0 || state.view !== "archive";
+  els.scanChip.hidden = !SCAN_READY || n > 0 || state.view === "archive";
   els.viewLabel.hidden = state.view !== "archive";
 }
 
@@ -873,8 +874,16 @@ els.archiveChip.addEventListener("click", () => switchView("archive"));
 
 // Swipe the theme button to the right: it stretches into the Archive button under your thumb.
 // Let go past the halfway point to open the Archive, otherwise it shrinks back into the theme button.
-const SCAN_READY = false; // the camera scanner arrives with 1.5; flip this when scan.js exists
-els.scanChip.hidden = !SCAN_READY;
+const SCAN_READY = true;
+let scanner = null;
+async function openScanner() {
+  if (!scanner) {
+    const { createScanner } = await import("./scan-ui.js");
+    scanner = createScanner({ openBlob, toast, buzz, loadExport, store });
+  }
+  await scanner.open();
+}
+els.scanChip.addEventListener("click", openScanner);
 let themeDragUntil = 0; // a tap right after a drag is part of the drag, not a theme toggle
 const swipe = (function swipeToArchive() {
   const btn = els.themeBtn;
@@ -1883,7 +1892,8 @@ function closeSheet() {
 const capApp = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
 if (capApp && capApp.addListener) {
   capApp.addListener("backButton", () => {
-    if (!els.sheet.hidden) closeSheet();
+    if (scanner && scanner.isOpen()) scanner.back();
+    else if (!els.sheet.hidden) closeSheet();
     else if (state.open) goHome();
     else if (state.mode === "pw") answerPassword(null);
     else if (["share", "rename", "confirm", "undo"].includes(state.mode)) setMode(defaultMode());
