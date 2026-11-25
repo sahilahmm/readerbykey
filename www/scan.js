@@ -209,21 +209,6 @@ function homography(from, to) {
 
 /* ---------- cleaning up ---------- */
 
-export function rotate(canvas, quarterTurns) {
-  const t = ((quarterTurns % 4) + 4) % 4;
-  if (!t) return canvas;
-  const out = document.createElement("canvas");
-  const swap = t % 2 === 1;
-  out.width = swap ? canvas.height : canvas.width;
-  out.height = swap ? canvas.width : canvas.height;
-  const ctx = out.getContext("2d");
-  ctx.translate(out.width / 2, out.height / 2);
-  ctx.rotate((t * Math.PI) / 2);
-  ctx.drawImage(canvas, -canvas.width / 2, -canvas.height / 2);
-  return out;
-}
-
-// mode: "color" (keep the photo, lift the paper), "doc" (even, clean grey), "bw" (black ink on white)
 export function enhance(canvas, mode) {
   const w = canvas.width, h = canvas.height;
   const out = document.createElement("canvas");

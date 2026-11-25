@@ -37,6 +37,9 @@ PowerPoint viewing (shapes, text, tables, pictures, SmartArt, notes outline), Op
 ## Known limits
 Charts show as a labelled box; animations/transitions/media not played; old binary `.ppt` unsupported; fonts approximated; iOS builds untested on a real device.
 
+## UI in 1.6
+Settings menu (`#setBtn`, `#menu`: Vibration `reader.haptics`, Dark mode). Pill: open/add + camera (`#bScan`). Selecting shows `#delChip` (bin) + `#allChip` (Select all/Clear) in the tools row. Archive = swipe the dock left (`swipePill` in app.js; right to return), list slides via `.out-left/.out-right`. CI minifies www js/css with esbuild (`prepare-web.mjs`, only when `CI` is set; do not run it locally with CI=1 without committing first, it rewrites files).
+
 ## Done in 1.5 / 1.5.1: Scanner
 - 1.5.1 moved the scanner into the dock pill (no full-screen UI). Tap `#scanChip` -> `scanner.open()` clicks hidden `#scanCapture` (`capture="environment"`) so the phone's native camera app takes the photo. `www/scan-ui.js` `createScanner({..., setMode, defaultMode, say})`: photo -> "Processing…" -> `detectCorners`/`warp`/`enhance` automatically -> thumbnail in `#scanThumbs` (each with remove x, trailing + for another page). Dock modes `scan` (sthumbs, sok, sx) and `scansave` (spdf, sword, sx) in `MODES` in `app.js`; `defaultMode()` returns `scan` while a session is active. Save builds PDF (`makePdf`) or Word (`buildImageDocx`), then `openBlob` with id `scan|<time>`. Max 30 pages. Android back = discard.
 - `www/scan.js`: `detectCorners`, `warp`, `rotate`, `enhance` (orig/color/doc/bw, default doc via `reader.scanLook`), `toJpeg`, `makePdf`. No manual corner editing or look chips any more (removed with the old screen); the engine still supports them.

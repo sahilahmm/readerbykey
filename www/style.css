@@ -124,7 +124,7 @@ button { font: inherit; color: inherit; }
 .chip.round { width: 48px; padding: 0; display: grid; place-items: center; }
 .chip[hidden] { display: none; }
 .chip .ic { width: 20px; height: 20px; }
-.sprite { position: absolute; } /* "Select all" sits opposite the Archive chip */
+.sprite { position: absolute; }
 
 /* the shelf sits right above the pill: the tools row first, then the files (thumb zone) */
 .shelf {
