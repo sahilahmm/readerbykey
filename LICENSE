@@ -1,0 +1,9 @@
+Copyright (c) 2026 BareBones. All rights reserved.
+
+Reader by Key, its source code, its visual design (including the BareBones mark, the "dynamic pill" interface, the Creamy Latte and Mocha colour scheme, and the one-hand layout), and its documentation are the property of BareBones.
+
+You may download and use the released app for your own personal use. You may read the source code. You may not copy, modify, redistribute, rebrand or sell the app, its design or its code, in whole or in part, without written permission from BareBones.
+
+Third-party libraries (PDF.js and others) stay under their own licences; see THIRD_PARTY_NOTICES in the app and sbom files in each release.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.

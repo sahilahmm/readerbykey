@@ -105,3 +105,8 @@ That message comes from Google Play Protect, and Chrome may also warn about down
 2. Releases are release-mode builds, target the current Android version, and ask for no permissions.
 3. Check the SHA-256 and attestation on the release page (see SECURITY.md).
 4. **Android developer verification.** Google is rolling out a rule that apps on certified phones must come from a registered developer: from September 2026 in Brazil, Indonesia, Singapore and Thailand, and worldwide from 2027. There is a free limited-distribution account for students and hobbyists (no ID document or fee). Register the package name `com.keybysah.reader` together with your signing key at the Android Developer Console once it opens for you; keep the same key forever.
+
+
+---
+
+Copyright (c) 2026 BareBones. All rights reserved. See [LICENSE](LICENSE) and [DESIGN.md](DESIGN.md).

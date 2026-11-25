@@ -2,6 +2,8 @@
   "name": "reader-by-key",
   "version": "1.0.0",
   "private": true,
+  "license": "UNLICENSED",
+  "author": "BareBones",
   "description": "Reader by Key: a simple, fast PDF reader for Android",
   "scripts": {
     "prepare:web": "node scripts/prepare-web.mjs && node scripts/notices.mjs",

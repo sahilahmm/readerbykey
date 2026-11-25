@@ -99,7 +99,7 @@ button { font: inherit; color: inherit; }
 }
 .hero[hidden] { display: none; }
 .logo { margin: 0 0 22px; }
-.logo-mark { display: block; width: clamp(72px, 22vw, 96px); height: auto; }
+.logo-mark { display: block; width: clamp(34px, 10vw, 44px); height: auto; }
 #greeting {
   margin: 0 0 10px;
   max-width: 11em;
@@ -610,14 +610,14 @@ button { font: inherit; color: inherit; }
 /* settings: a button in the top-right corner opens a small menu */
 .set { position: fixed; z-index: 12; top: calc(var(--top) + 10px); right: 12px; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: var(--soft); border: 1px solid var(--line); }
 .set .ic { width: 22px; height: 22px; }
-.menu { position: fixed; z-index: 12; top: calc(var(--top) + 60px); right: 12px; min-width: 210px; padding: 6px; border-radius: 22px; background: var(--soft); border: 1px solid var(--line); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18); animation: rise 0.2s ease both; }
+.menu { position: fixed; z-index: 12; top: calc(var(--top) + 60px); right: 12px; display: flex; flex-direction: column; gap: 10px; }
 .menu[hidden] { display: none; }
-.menu button { width: 100%; background: transparent; border: 0; min-height: 48px; padding: 0 14px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-radius: 16px; font-size: 15px; font-weight: 600; text-align: left; }
-.menu button:active { background: var(--line); }
-.sw { position: relative; flex: none; width: 42px; height: 24px; border-radius: 999px; background: var(--line); transition: background 0.2s ease; }
-.sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform 0.2s ease; }
-[aria-checked="true"] > .sw { background: var(--accent); }
-[aria-checked="true"] > .sw::after { transform: translateX(18px); }
+.opt { width: 44px; height: 44px; padding: 0; border-radius: 50%; display: grid; place-items: center; background: var(--soft); border: 1px solid var(--line); color: var(--ink); opacity: 0.75; animation: rise 0.2s ease both; }
+.opt:nth-child(2) { animation-delay: 0.05s; }
+.opt .ic { width: 22px; height: 22px; }
+.opt[aria-checked="true"] { background: var(--accent); border-color: var(--accent); color: #fff; opacity: 1; }
+.opt .slash { stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; }
+.opt[aria-checked="true"] .slash { display: none; }
 #home { touch-action: pan-y; }
 .shelf.out-left { opacity: 0; transform: translateX(-36px); transition: opacity 0.16s ease, transform 0.16s ease; }
 .shelf.out-right { opacity: 0; transform: translateX(36px); transition: opacity 0.16s ease, transform 0.16s ease; }
