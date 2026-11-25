@@ -331,6 +331,7 @@ const MODES = {
   home: ["add", "scan"], //                 something is in Recent
   scan: ["sthumbs", "sok", "sx"], //          scanned pages
   scansave: ["spdf", "sword", "sx"],
+  scanedit: ["ecancel", "erot", "eapply"],
   select: ["share", "archive", "delete"], //  one or more files are selected
   share: ["pdf", "word", "no"],
   confirm: ["msg", "yes", "no"],
@@ -886,7 +887,7 @@ let swipeUntil = 0; // the tap that ends a swipe is part of the swipe
   const sh = els.shelf;
   let start = null, dx = 0, moved = false;
   document.addEventListener("pointerdown", (e) => {
-    if (els.home.hidden || !e.isPrimary || ["pw", "scan", "scansave"].includes(state.mode)) return;
+    if (els.home.hidden || !e.isPrimary || ["pw", "scan", "scansave", "scanedit"].includes(state.mode)) return;
     if (e.target.closest("input, #menu, #setBtn, .dot")) return;
     start = { x: e.clientX, y: e.clientY, id: e.pointerId };
     dx = 0;

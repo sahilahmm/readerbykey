@@ -15,6 +15,7 @@
     <defs>
       <g id="i-gear"><path d="M4 7h8M18 7h2M4 12h2M12 12h8M4 17h9M19 17h1"/><circle cx="15" cy="7" r="2.2"/><circle cx="9" cy="12" r="2.2"/><circle cx="16" cy="17" r="2.2"/></g>
       <g id="i-bin"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13M10 11v6M14 11v6"/></g>
+      <g id="i-rotate"><path d="M20 12a8 8 0 1 1-2.6-5.9M20 4v4h-4"/></g>
       <g id="i-plus"><path d="M12 5v14M5 12h14"/></g>
       <g id="i-minus"><path d="M5 12h14"/></g>
       <g id="i-x"><path d="M6 6l12 12M18 6L6 18"/></g>
@@ -52,6 +53,10 @@
       <button id="allChip" class="chip" type="button" hidden>Select all</button>
     </section>
 
+    <div id="scanEdit" class="scan-edit" hidden>
+      <div id="seStage" class="se-stage"><canvas id="seCanvas"></canvas><svg id="seQuad" class="se-quad"><polygon id="sePoly"/></svg><div id="seHandles"></div></div>
+    </div>
+
     <nav id="dock" class="dock" aria-live="polite">
       <div class="seg" data-s="open"><button id="bOpen" type="button"><svg class="ic" viewBox="0 0 24 24"><use href="#i-plus"/></svg><span>Open Document</span></button></div>
       <div class="seg" data-s="add"><button id="bAdd" type="button" aria-label="Open another document"><svg class="ic" viewBox="0 0 24 24"><use href="#i-plus"/></svg></button></div>
@@ -66,6 +71,9 @@
       <div class="seg" data-s="msg"><div id="dockMsg" class="msg"></div></div>
 
       <div class="seg" data-s="sthumbs"><div id="scanThumbs" class="thumbs"></div></div>
+      <div class="seg" data-s="ecancel"><button id="eCancel" type="button" aria-label="Cancel"><svg class="ic" viewBox="0 0 24 24"><use href="#i-x"/></svg></button></div>
+      <div class="seg" data-s="erot"><button id="eRot" type="button" aria-label="Rotate"><svg class="ic" viewBox="0 0 24 24"><use href="#i-rotate"/></svg></button></div>
+      <div class="seg" data-s="eapply"><button id="eApply" type="button" aria-label="Apply"><svg class="ic" viewBox="0 0 24 24"><use href="#i-check"/></svg></button></div>
       <div class="seg" data-s="sok"><button id="sOk" type="button" aria-label="Finish scan"><svg class="ic" viewBox="0 0 24 24"><use href="#i-check"/></svg></button></div>
       <div class="seg" data-s="sx"><button id="sX" type="button" aria-label="Discard scan"><svg class="ic" viewBox="0 0 24 24"><use href="#i-x"/></svg></button></div>
       <div class="seg" data-s="spdf"><button id="sPdf" type="button"><span>PDF</span></button></div>
