@@ -119,7 +119,7 @@ ${patterns}
   x = x.replace(/<!--\s*Permissions\s*-->\s*/, "");
   if (!x.includes("xmlns:tools")) x = x.replace("<manifest ", '<manifest xmlns:tools="http://schemas.android.com/tools" ');
   // make sure no library adds it back during the manifest merge
-  x = x.replace("</manifest>", '    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />\n</manifest>');
+  x = x.replace("</manifest>", '    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />\n    <queries><intent><action android:name="android.media.action.IMAGE_CAPTURE" /></intent></queries>\n</manifest>');
 
   // no cloud/device-transfer backups of your documents, no plain-text traffic
   must(/android:allowBackup="true"/.test(x), "allowBackup not found");
@@ -150,12 +150,14 @@ ${patterns}
 </network-security-config>
 `
   );
-  // sharing only ever needs the "shared" folder inside the cache; nothing else can be handed out
+  // sharing needs the "shared" cache folder; the camera plugin needs somewhere in the app's own private folders to put the photo
   writeFileSync(
     join(xml, "file_paths.xml"),
     `<?xml version="1.0" encoding="utf-8"?>
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
     <cache-path name="shared" path="shared/" />
+    <cache-path name="camera_cache" path="." />
+    <external-files-path name="camera_files" path="." />
 </paths>
 `
   );
