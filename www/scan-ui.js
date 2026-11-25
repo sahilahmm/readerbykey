@@ -43,7 +43,7 @@ export function createScanner({ openBlob, toast, buzz, loadExport, store, setMod
       plus.className = "plus";
       plus.setAttribute("aria-label", "Scan another page");
       plus.innerHTML = '<svg class="ic" viewBox="0 0 24 24"><use href="#i-plus"/></svg>';
-      plus.addEventListener("click", () => input.click());
+      plus.addEventListener("click", shoot);
       strip.append(plus);
     }
     strip.scrollLeft = strip.scrollWidth;
@@ -119,6 +119,20 @@ export function createScanner({ openBlob, toast, buzz, loadExport, store, setMod
     }
   }
 
+  // the phone's own camera app, opened directly (no file chooser); the file input is only the fallback
+  async function shoot() {
+    const cam = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Camera;
+    if (!cam) return input.click();
+    try {
+      const r = await cam.getPhoto({ source: "CAMERA", resultType: "uri", quality: 95, correctOrientation: true, saveToGallery: false });
+      const blob = await (await fetch(r.webPath)).blob();
+      take(blob);
+    } catch (e) {
+      // closing the camera without a photo is not an error
+      if (!/cancel/i.test(String((e && e.message) || e))) input.click();
+    }
+  }
+
   input.addEventListener("change", () => {
     const f = [...input.files].find((x) => x.type.startsWith("image/"));
     input.value = "";
@@ -136,7 +150,7 @@ export function createScanner({ openBlob, toast, buzz, loadExport, store, setMod
   $("sWord").addEventListener("click", () => save("word"));
 
   return {
-    open: () => (pages.length ? paint() : input.click()),
+    open: () => (pages.length ? paint() : shoot()),
     isOpen: () => active || busy,
     back: () => (busy ? null : end()),
   };
