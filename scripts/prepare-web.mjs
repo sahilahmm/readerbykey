@@ -36,7 +36,8 @@ for (const dir of ["standard_fonts", "iccs", "wasm"]) {
   mkdirSync(join(ocr, "lang"), { recursive: true });
   cpSync(join(nm, "tesseract.js", "dist", "tesseract.esm.min.js"), join(ocr, "tesseract.esm.min.js"));
   cpSync(join(nm, "tesseract.js", "dist", "worker.min.js"), join(ocr, "worker.min.js"));
-  cpSync(join(nm, "tesseract.js-core", "tesseract-core-simd-lstm.wasm.js"), join(ocr, "core", "tesseract-core-simd-lstm.wasm.js"));
+  // the engine picks the fastest core the phone supports; older WebViews use the plain SIMD one
+  for (const c of ["relaxedsimd-lstm", "simd-lstm"]) cpSync(join(nm, "tesseract.js-core", `tesseract-core-${c}.wasm.js`), join(ocr, "core", `tesseract-core-${c}.wasm.js`));
   for (const l of ["eng", "ben"]) cpSync(join(nm, "@tesseract.js-data", l, "4.0.0_best_int", `${l}.traineddata.gz`), join(ocr, "lang", `${l}.traineddata.gz`));
 }
 

@@ -3,13 +3,14 @@ let worker = null;
 
 export async function startOcr() {
   if (worker) return worker;
-  const { createWorker } = await import("./lib/ocr/tesseract.esm.min.js");
+  const { createWorker } = (await import("./lib/ocr/tesseract.esm.min.js")).default;
   worker = await createWorker(["eng", "ben"], 1, {
     workerPath: new URL("./lib/ocr/worker.min.js", import.meta.url).href,
     corePath: new URL("./lib/ocr/core/", import.meta.url).href,
     langPath: new URL("./lib/ocr/lang/", import.meta.url).href,
     workerBlobURL: false,
     gzip: true,
+    cacheMethod: "none", // the language files are already inside the app
   });
   return worker;
 }
