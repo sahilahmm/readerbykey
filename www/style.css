@@ -194,7 +194,7 @@ button { font: inherit; color: inherit; }
 .card-main {
   display: block;
   width: 100%;
-  padding: 0 92px 0 0;
+  padding: 0 136px 0 0;
   border: 0;
   background: none;
   text-align: left;
@@ -214,7 +214,8 @@ button { font: inherit; color: inherit; }
 .card-bar i { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
 
 .dot,
-.pin {
+.pin,
+.pen {
   touch-action: none;
 }
 .pin {
@@ -230,11 +231,39 @@ button { font: inherit; color: inherit; }
   background: none;
   opacity: 0.55;
 }
-.pin .ic { width: 20px; height: 20px; }
+.pin .ic, .pen .ic { width: 20px; height: 20px; }
+.pen {
+  position: absolute;
+  top: calc(var(--card-pad) - 8px);
+  right: calc(var(--card-pad) - 8px + 88px);
+  width: 44px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  opacity: 0.55;
+}
+.card-edit {
+  width: 100%;
+  min-height: 32px;
+  padding: 2px 8px;
+  margin: -2px 0;
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  background: var(--bg);
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  user-select: text;
+}
+.shelf.archive .pen { right: calc(var(--card-pad) - 8px + 44px); }
+#allChip { align-self: flex-start; margin-top: 12px; }
 .card.pinned .pin { opacity: 1; color: var(--accent); }
 .card.pinned .pin .ic { fill: currentColor; }
 .shelf.archive .pin { display: none; }
-.shelf.archive .card-main { padding-right: 44px; }
+.shelf.archive .card-main { padding-right: 92px; }
 
 .dot {
   position: absolute;
@@ -318,6 +347,7 @@ button { font: inherit; color: inherit; }
 .seg[data-s="add"].on, .seg[data-s="open"].on { flex-grow: 3; }
 .seg[data-s="msg"].on, .seg[data-s="input"].on, .seg[data-s="pw"].on { flex-grow: 5; }
 .seg[data-s="undo"].on { flex-grow: 2; }
+.seg[data-s="delete"].on { flex-grow: 0.55; }
 
 .seg > button,
 .seg > input,
@@ -588,7 +618,7 @@ button { font: inherit; color: inherit; }
 .sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform 0.2s ease; }
 [aria-checked="true"] > .sw { background: var(--accent); }
 [aria-checked="true"] > .sw::after { transform: translateX(18px); }
-.dock { touch-action: pan-y; }
+#home, .dock { touch-action: pan-y; }
 .dock.drag { transition: none; }
 .dock.snap { transition: transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.1); }
 .shelf.out-left { opacity: 0; transform: translateX(-36px); transition: opacity 0.16s ease, transform 0.16s ease; }

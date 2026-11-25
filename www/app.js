@@ -35,9 +35,9 @@ const paged = (kind) => kind === "pdf" || kind === "pptx"; // read page by page
 const $ = (id) => document.getElementById(id);
 const els = Object.fromEntries(
   [
-    "home", "reader", "shelf", "list", "empty", "hero", "greeting", "viewLabel", "tools", "allChip", "delChip", "setBtn", "menu", "optVib", "optDark", "bScan", "groupChip", "dock", "fileInput",
-    "bOpen", "bAdd", "bShare", "bRename", "bArchive", "archiveLabel",
-    "bPdf", "bWord", "bYes", "bNo", "bBack", "renameInput", "dockMsg",
+    "home", "reader", "shelf", "list", "empty", "hero", "greeting", "viewLabel", "tools", "allChip", "setBtn", "menu", "optVib", "optDark", "bScan", "groupChip", "dock", "fileInput",
+    "bOpen", "bAdd", "bShare", "bDelete", "bArchive", "archiveLabel",
+    "bPdf", "bWord", "bYes", "bNo", "bBack", "dockMsg",
     "bar", "title", "backBtn", "textBtn", "nightBtn", "zoomIn", "zoomOut",
     "scroller", "pages", "textView", "pill", "sheet", "jumpForm", "jumpInput",
     "loading", "bUndo", "pwInput",
@@ -219,7 +219,7 @@ document.addEventListener(
     else if (t.matches(".pin")) buzz("double");
     else if (t.matches("#zoomIn, #zoomOut, .dot")) buzz("select");
     else if (t.matches("#pill")) buzz("soft");
-    else if (t.matches("#bArchive, #bShare, #bRename, #bOpen, #bAdd, #bScan")) buzz("ok");
+    else if (t.matches("#bArchive, #bShare, #bOpen, #bAdd, #bScan")) buzz("ok");
     else buzz("tap");
   },
   true
@@ -331,10 +331,8 @@ const MODES = {
   home: ["add", "scan"], //                 something is in Recent
   scan: ["sthumbs", "sok", "sx"], //          scanned pages
   scansave: ["spdf", "sword", "sx"],
-  select: ["share", "rename", "archive"], //  one file is selected
-  multi: ["share", "archive"], //   two or more are selected
+  select: ["share", "archive", "delete"], //  one or more files are selected
   share: ["pdf", "word", "no"],
-  rename: ["input", "yes"],
   confirm: ["msg", "yes", "no"],
   undo: ["msg", "undo"],
   pw: ["pw", "yes", "no"],
@@ -354,7 +352,6 @@ function setMode(name) {
 
 function defaultMode() {
   if (scanner && scanner.isOpen()) return "scan";
-  if (state.sel.size > 1) return "multi";
   if (state.sel.size) return "select";
   if (state.view === "archive") return "archive";
   return state.live.length ? "home" : "open";
@@ -435,6 +432,11 @@ function cardFor(m) {
   dot.setAttribute("aria-label", "Select");
   dot.innerHTML = CHECK;
 
+  const pen = document.createElement("button");
+  pen.type = "button";
+  pen.className = "pen";
+  pen.setAttribute("aria-label", "Rename");
+  pen.innerHTML = '<svg class="ic" viewBox="0 0 24 24"><use href="#i-edit"/></svg>';
   if (!m.archived) {
     const pin = document.createElement("button");
     pin.type = "button";
@@ -442,9 +444,9 @@ function cardFor(m) {
     pin.setAttribute("aria-label", m.pinned ? "Unpin" : "Pin to the bottom");
     pin.setAttribute("aria-pressed", String(!!m.pinned));
     pin.innerHTML = '<svg class="ic" viewBox="0 0 24 24"><path d="M9 4h6l-1 6 3 3H7l3-3-1-6zM12 13v7"/></svg>';
-    li.append(main, pin, dot);
+    li.append(main, pen, pin, dot);
     li.classList.toggle("pinned", !!m.pinned);
-  } else li.append(main, dot);
+  } else li.append(main, pen, dot);
   return li;
 }
 
@@ -529,7 +531,6 @@ async function refreshHome(settle = true) {
 // the tools row above the files: a bin and Select all / Clear appear while you select
 function paintTools() {
   const n = state.sel.size;
-  els.delChip.hidden = !n;
   els.allChip.hidden = !(n > 0 && state.shown.length > 1);
   els.allChip.textContent = n >= state.shown.length ? "Clear" : "Select all";
   els.groupChip.hidden = n > 0 || state.view !== "archive";
@@ -616,7 +617,7 @@ els.list.addEventListener("pointerdown", (e) => {
   drag = null;
   suppressClick = false;
   if (!card) return;
-  if (e.target.closest(".pin")) return;
+  if (e.target.closest(".pin, .pen, .card-edit")) return;
   if (e.target.closest(".dot")) {
     drag = { want: !state.sel.has(card.dataset.id), last: card.dataset.id, moved: false };
     return;
@@ -660,6 +661,9 @@ els.list.addEventListener("click", (e) => {
     press = null; // this click is just the end of a long-press
     return;
   }
+  if (e.target.closest(".card-edit")) return;
+  const pen = e.target.closest(".pen");
+  if (pen) return startRename(pen.closest(".card"));
   const pin = e.target.closest(".pin");
   if (pin) return togglePin(pin.closest(".card").dataset.id);
   const card = e.target.closest(".card");
@@ -679,7 +683,7 @@ const pickFile = () => els.fileInput.click();
 els.bOpen.addEventListener("click", pickFile);
 els.bAdd.addEventListener("click", pickFile);
 
-els.delChip.addEventListener("click", () => {
+els.bDelete.addEventListener("click", () => {
   const ids = [...state.sel];
   if (!ids.length) return;
   buzz("warn");
@@ -694,7 +698,6 @@ els.bNo.addEventListener("click", () => {
 });
 
 els.bYes.addEventListener("click", async () => {
-  if (state.mode === "rename") return commitRename();
   if (state.mode === "pw") return answerPassword(els.pwInput.value);
   if (state.mode !== "confirm" || !state.pending) return;
   const { type, ids } = state.pending;
@@ -762,39 +765,41 @@ els.groupChip.addEventListener("click", () => {
   refreshHome(false);
 });
 
-els.bRename.addEventListener("click", () => {
-  const m = selMetas()[0];
-  if (!m) return;
-  els.renameInput.value = stripExt(m.name);
-  setMode("rename");
-  setTimeout(() => {
-    els.renameInput.focus();
-    els.renameInput.select();
-  }, 300);
-});
-els.renameInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") {
-    e.preventDefault();
-    commitRename();
-  }
-});
-
-async function commitRename() {
-  const m = selMetas()[0];
-  const name = els.renameInput.value.trim().replace(DOC_EXT, "");
-  els.renameInput.blur();
-  if (!m || !name || name === stripExt(m.name)) {
-    setMode(defaultMode());
-    return;
-  }
-  await putMeta({ ...m, name: `${name}${extOf(m)}` });
-  state.sel.clear();
-  await refreshHome();
-  toast("Renamed", async () => {
-    const cur = state.all.find((x) => x.id === m.id);
-    if (cur) await putMeta({ ...cur, name: m.name });
+// the pen on a card: the name turns into a field right there
+function startRename(li) {
+  const m = state.all.find((x) => x.id === li.dataset.id);
+  const title = li.querySelector(".card-title");
+  if (!m || !title) return;
+  const inp = document.createElement("input");
+  inp.className = "card-edit";
+  inp.value = stripExt(m.name);
+  inp.maxLength = 80;
+  inp.enterKeyHint = "done";
+  inp.setAttribute("aria-label", "New name");
+  title.replaceWith(inp);
+  inp.focus();
+  inp.select();
+  let done = false;
+  const finish = async (save) => {
+    if (done) return;
+    done = true;
+    const name = inp.value.trim().replace(DOC_EXT, "");
+    if (!save || !name || name === stripExt(m.name)) return inp.replaceWith(title);
+    await putMeta({ ...m, name: `${name}${extOf(m)}` });
     await refreshHome();
+    toast("Renamed", async () => {
+      const cur = state.all.find((x) => x.id === m.id);
+      if (cur) await putMeta({ ...cur, name: m.name });
+      await refreshHome();
+    });
+  };
+  inp.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      inp.blur();
+    } else if (e.key === "Escape") finish(false);
   });
+  inp.addEventListener("blur", () => finish(true));
 }
 
 // PDFs can go out as PDF or Word; Word and text files go out as they are
@@ -875,17 +880,18 @@ let dockDragUntil = 0; // a tap that ends a drag is part of the drag
 (function swipePill() {
   const d = els.dock;
   let start = null, dx = 0, moved = false;
-  d.addEventListener("pointerdown", (e) => {
-    if (["input", "pw", "scan", "scansave"].includes(state.mode)) return;
+  // the whole strip around the pill counts, so the swipe doesn't need aim
+  document.addEventListener("pointerdown", (e) => {
+    if (els.home.hidden || ["pw", "scan", "scansave"].includes(state.mode) || e.clientY < d.getBoundingClientRect().top - 90) return;
     start = { x: e.clientX, y: e.clientY, id: e.pointerId };
     dx = 0;
     moved = false;
     d.classList.remove("snap");
   });
-  d.addEventListener("pointermove", (e) => {
+  document.addEventListener("pointermove", (e) => {
     if (!start || e.pointerId !== start.id) return;
     dx = e.clientX - start.x;
-    if (!moved && Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(e.clientY - start.y)) {
+    if (!moved && Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(e.clientY - start.y)) {
       moved = true;
       d.setPointerCapture(e.pointerId);
       d.classList.add("drag");
@@ -902,20 +908,20 @@ let dockDragUntil = 0; // a tap that ends a drag is part of the drag
     if (!was) return;
     dockDragUntil = Date.now() + 400;
     store("reader.swipeHint", "1");
-    if (go < -60 && state.view !== "archive") {
+    if (go < -40 && state.view !== "archive") {
       if (state.archivedCount) {
         buzz("double");
         switchView("archive");
       } else flash("Archive is empty");
-    } else if (go > 60 && state.view === "archive") {
+    } else if (go > 40 && state.view === "archive") {
       buzz("double");
       switchView("recent");
     }
   };
-  d.addEventListener("pointerup", end);
-  d.addEventListener("pointercancel", end);
+  document.addEventListener("pointerup", end);
+  document.addEventListener("pointercancel", end);
   d.addEventListener("lostpointercapture", end);
-  d.addEventListener("click", (e) => Date.now() < dockDragUntil && (e.stopPropagation(), e.preventDefault()), true);
+  document.addEventListener("click", (e) => Date.now() < dockDragUntil && (e.stopPropagation(), e.preventDefault()), true);
 })();
 els.bBack.addEventListener("click", () => switchView("recent"));
 
@@ -1875,7 +1881,7 @@ if (capApp && capApp.addListener) {
     else if (!els.sheet.hidden) closeSheet();
     else if (state.open) goHome();
     else if (state.mode === "pw") answerPassword(null);
-    else if (["share", "rename", "confirm", "undo"].includes(state.mode)) setMode(defaultMode());
+    else if (["share", "confirm", "undo"].includes(state.mode)) setMode(defaultMode());
     else if (state.sel.size) clearSel();
     else if (state.view === "archive") els.bBack.click();
     else capApp.exitApp();

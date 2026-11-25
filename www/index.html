@@ -45,12 +45,11 @@
 
     <section id="shelf" class="shelf">
       <div id="tools" class="tools">
-        <button id="delChip" class="chip round" type="button" aria-label="Remove selected" hidden><svg class="ic" viewBox="0 0 24 24"><use href="#i-bin"/></svg></button>
-        <button id="allChip" class="chip" type="button" hidden>Select all</button>
         <button id="groupChip" class="chip" type="button" hidden>Group: Date</button>
         <span id="viewLabel" class="view-label" hidden></span>
       </div>
       <ul id="list" class="list"></ul>
+      <button id="allChip" class="chip" type="button" hidden>Select all</button>
     </section>
 
     <nav id="dock" class="dock" aria-live="polite">
@@ -59,13 +58,11 @@
       <div class="seg" data-s="scan"><button id="bScan" type="button" aria-label="Scan a document"><svg class="ic" viewBox="0 0 24 24"><use href="#i-camera"/></svg></button></div>
 
       <div class="seg" data-s="share"><button id="bShare" type="button"><svg class="ic" viewBox="0 0 24 24"><use href="#i-share"/></svg><span>Share</span></button></div>
-      <div class="seg" data-s="rename"><button id="bRename" type="button"><svg class="ic" viewBox="0 0 24 24"><use href="#i-edit"/></svg><span>Rename</span></button></div>
       <div class="seg" data-s="archive"><button id="bArchive" type="button"><svg class="ic" viewBox="0 0 24 24"><use href="#i-archive"/></svg><span id="archiveLabel">Archive</span></button></div>
+      <div class="seg" data-s="delete"><button id="bDelete" type="button" aria-label="Remove"><svg class="ic" viewBox="0 0 24 24"><use href="#i-bin"/></svg></button></div>
 
       <div class="seg" data-s="pdf"><button id="bPdf" type="button"><span>PDF</span></button></div>
       <div class="seg" data-s="word"><button id="bWord" type="button"><span>Word</span></button></div>
-
-      <div class="seg" data-s="input"><input id="renameInput" type="text" maxlength="80" enterkeyhint="done" autocomplete="off" aria-label="New name" /></div>
       <div class="seg" data-s="msg"><div id="dockMsg" class="msg"></div></div>
 
       <div class="seg" data-s="sthumbs"><div id="scanThumbs" class="thumbs"></div></div>
