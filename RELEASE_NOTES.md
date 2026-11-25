@@ -1,3 +1,3 @@
-### What's new in 1.5.1.2
+### What's new in 1.5.1.3
 
-- Scan now finds the camera plugin more reliably, and if the camera can't open it tells you why before offering your photos.
+- **Scan opens your camera directly.** Fixes "Unable to create photo on disk": the camera now has a private place to save the photo.
