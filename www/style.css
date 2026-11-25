@@ -642,3 +642,5 @@ button { font: inherit; color: inherit; }
 .se-quad polygon { fill: rgba(40, 90, 220, 0.18); stroke: var(--accent); stroke-width: 2.5; }
 .se-handle { position: absolute; width: 36px; height: 36px; margin: -18px 0 0 -18px; border-radius: 50%; background: var(--accent); border: 3px solid #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35); touch-action: none; }
 .thumbs .t.lift { z-index: 2; transform: scale(1.12); box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35); }
+.seg[data-s="socr"].on { flex-grow: 0.7; }
+#sOcr[aria-checked="false"] { opacity: 0.5; text-decoration: line-through; }

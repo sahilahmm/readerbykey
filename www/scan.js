@@ -292,7 +292,37 @@ export function toJpeg(canvas, quality = 0.85) {
 }
 
 // A PDF with one JPEG picture per page. pages: [{ jpeg: Uint8Array, w, h }] (pixel sizes)
+// An invisible, searchable text layer: every character used gets a 2-byte code, and a ToUnicode map says which letter it is.
+// The page picture stays exactly as scanned; the text only lets you search and copy.
+function textLayer(words, w, h) {
+  const k = 72 / 150;
+  let out = "BT 3 Tr\n";
+  for (const wd of words) {
+    const chars = [...wd.t].filter((c) => c.codePointAt(0) <= 0xffff);
+    if (!chars.length) continue;
+    const size = Math.max(4, (wd.y1 - wd.y0) * k * 0.8);
+    const width = (wd.x1 - wd.x0) * k;
+    const tz = Math.max(10, Math.min(400, (width / (chars.length * size * 0.5)) * 100));
+    out += `/F1 ${size.toFixed(1)} Tf ${tz.toFixed(0)} Tz 1 0 0 1 ${(wd.x0 * k).toFixed(1)} ${((h - wd.y1) * k + size * 0.2).toFixed(1)} Tm <${chars.map((c) => hex(codeOf(c))).join("")}> Tj\n`;
+  }
+  return out + "ET";
+}
+const codes = new Map();
+const codeOf = (c) => {
+  if (!codes.has(c)) codes.set(c, codes.size + 1);
+  return codes.get(c);
+};
+const hex = (n) => n.toString(16).padStart(4, "0");
+function toUnicodeMap() {
+  const rows = [...codes].map(([c, n]) => `<${hex(n)}> <${hex(c.codePointAt(0))}>`);
+  let body = "";
+  for (let i = 0; i < rows.length; i += 100) body += `${Math.min(100, rows.length - i)} beginbfchar\n${rows.slice(i, i + 100).join("\n")}\nendbfchar\n`;
+  return `/CIDInit /ProcSet findresource begin 12 dict begin begincmap /CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def /CMapName /Adobe-Identity-UCS def /CMapType 2 def 1 begincodespacerange <0000> <FFFF> endcodespacerange\n${body}endcmap CMapName currentdict /CMap defineresource pop end end`;
+}
+
+// pages: [{ jpeg, w, h, words? }]  (words from text recognition make the PDF searchable)
 export function makePdf(pages, title = "Scan") {
+  codes.clear();
   const enc = new TextEncoder();
   const parts = [];
   const offsets = [];
@@ -310,14 +340,17 @@ export function makePdf(pages, title = "Scan") {
   };
   push("%PDF-1.4\n%\xE2\xE3\xCF\xD3\n");
   const n = pages.length;
+  const searchable = pages.some((p) => p.words && p.words.length);
+  const contents = pages.map((p) => `q ${((p.w * 72) / 150).toFixed(2)} 0 0 ${((p.h * 72) / 150).toFixed(2)} 0 0 cm /Im0 Do Q` + (p.words && p.words.length ? "\n" + textLayer(p.words, p.w, p.h) : ""));
+  const fontNo = 4 + n * 3; // after the info object
   obj(1, "<< /Type /Catalog /Pages 2 0 R >>");
   obj(2, `<< /Type /Pages /Count ${n} /Kids [${pages.map((_, i) => `${3 + i * 3} 0 R`).join(" ")}] >>`);
   pages.forEach((p, i) => {
     const pg = 3 + i * 3, content = pg + 1, image = pg + 2;
     const pw = (p.w * 72) / 150, ph = (p.h * 72) / 150; // about 150 dpi
-    obj(pg, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pw.toFixed(2)} ${ph.toFixed(2)}] /Resources << /XObject << /Im0 ${image} 0 R >> >> /Contents ${content} 0 R >>`);
-    const stream = `q ${pw.toFixed(2)} 0 0 ${ph.toFixed(2)} 0 0 cm /Im0 Do Q`;
-    obj(content, `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
+    obj(pg, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pw.toFixed(2)} ${ph.toFixed(2)}] /Resources << /XObject << /Im0 ${image} 0 R >>${searchable ? ` /Font << /F1 ${fontNo} 0 R >>` : ""} >> /Contents ${content} 0 R >>`);
+    const stream = contents[i];
+    obj(content, `<< /Length ${new TextEncoder().encode(stream).length} >>\nstream\n${stream}\nendstream`);
     offsets[image] = pos;
     push(`${image} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${p.w} /Height ${p.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${p.jpeg.length} >>\nstream\n`);
     push(p.jpeg);
@@ -325,9 +358,17 @@ export function makePdf(pages, title = "Scan") {
   });
   const infoNo = 3 + n * 3;
   obj(infoNo, `<< /Title (${title.replace(/[()\\]/g, "")}) /Producer (Reader by Key) >>`);
+  if (searchable) {
+    const cm = toUnicodeMap();
+    obj(fontNo, `<< /Type /Font /Subtype /Type0 /BaseFont /ReaderOCR /Encoding /Identity-H /DescendantFonts [${fontNo + 1} 0 R] /ToUnicode ${fontNo + 2} 0 R >>`);
+    obj(fontNo + 1, `<< /Type /Font /Subtype /CIDFontType2 /BaseFont /ReaderOCR /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /DW 500 /FontDescriptor ${fontNo + 3} 0 R /CIDToGIDMap /Identity >>`);
+    obj(fontNo + 2, `<< /Length ${cm.length} >>\nstream\n${cm}\nendstream`);
+    obj(fontNo + 3, "<< /Type /FontDescriptor /FontName /ReaderOCR /Flags 4 /FontBBox [0 -200 1000 900] /ItalicAngle 0 /Ascent 800 /Descent -200 /CapHeight 700 /StemV 80 >>");
+  }
+  const last = searchable ? fontNo + 3 : infoNo;
   const xref = pos;
-  push(`xref\n0 ${infoNo + 1}\n0000000000 65535 f \n`);
-  for (let i = 1; i <= infoNo; i++) push(`${String(offsets[i]).padStart(10, "0")} 00000 n \n`);
-  push(`trailer\n<< /Size ${infoNo + 1} /Root 1 0 R /Info ${infoNo} 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+  push(`xref\n0 ${last + 1}\n0000000000 65535 f \n`);
+  for (let i = 1; i <= last; i++) push(`${String(offsets[i]).padStart(10, "0")} 00000 n \n`);
+  push(`trailer\n<< /Size ${last + 1} /Root 1 0 R /Info ${infoNo} 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
   return new Blob(parts, { type: "application/pdf" });
 }

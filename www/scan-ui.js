@@ -255,6 +255,15 @@ export function createScanner({ openBlob, toast, buzz, loadExport, store, setMod
   $("eApply").addEventListener("click", applyEdit);
   window.addEventListener("resize", () => editing && drawEdit());
 
+  // read the words on one page: a larger render than the saved one, so small print is still legible
+  async function readOne(p, readPage) {
+    const src = await decode(p.src);
+    const big = enhance(warp(src, p.corners, 2600), look());
+    const r = await readPage(big);
+    const k = p.canvas.width / big.width;
+    return { paragraphs: r.paragraphs, words: r.words.map((w) => ({ t: w.t, x0: w.x0 * k, y0: w.y0 * k, x1: w.x1 * k, y1: w.y1 * k })) };
+  }
+
   async function save(kind) {
     if (!pages.length || busy) return;
     busy = true;
@@ -264,12 +273,34 @@ export function createScanner({ openBlob, toast, buzz, loadExport, store, setMod
     const d = new Date();
     const pad = (n) => String(n).padStart(2, "0");
     const name = `Scan ${d.getDate()} ${d.toLocaleString("en", { month: "short" })} ${pad(d.getHours())}${pad(d.getMinutes())}`;
+    const ocr = store("reader.scanOcr") !== "off";
     try {
+      let texts = null;
+      if (ocr) {
+        let ocrMod = null;
+        try {
+          ocrMod = await import("./ocr.js");
+          texts = [];
+          for (let i = 0; i < pages.length; i++) {
+            say(`Reading page ${i + 1} of ${pages.length}…`);
+            await frame();
+            texts.push(await readOne(pages[i], ocrMod.readPage));
+          }
+        } catch {
+          texts = null;
+          toast("Text recognition isn't available here");
+        }
+        if (ocrMod) await ocrMod.stopOcr();
+      }
+      say("Processing…");
+      await frame();
       const imgs = [];
-      for (const p of pages) imgs.push({ jpeg: await toJpeg(p.canvas, 0.85), w: p.canvas.width, h: p.canvas.height });
+      for (let i = 0; i < pages.length; i++) imgs.push({ jpeg: await toJpeg(pages[i].canvas, 0.85), w: pages[i].canvas.width, h: pages[i].canvas.height, words: texts && texts[i].words });
+      const found = texts && texts.some((t) => t.paragraphs.length);
       let blob, filename;
       if (kind === "word") {
-        blob = (await loadExport()).buildImageDocx(imgs, name);
+        const x = await loadExport();
+        blob = found ? x.buildDocx(texts.map((t) => (t.paragraphs.length ? t.paragraphs : [""])), name) : x.buildImageDocx(imgs, name);
         filename = `${name}.docx`;
       } else {
         blob = makePdf(imgs, name);
@@ -314,6 +345,14 @@ export function createScanner({ openBlob, toast, buzz, loadExport, store, setMod
   $("sX").addEventListener("click", () => {
     buzz("warn");
     end();
+  });
+  const ocrBtn = $("sOcr");
+  ocrBtn.setAttribute("aria-checked", String(store("reader.scanOcr") !== "off"));
+  ocrBtn.addEventListener("click", () => {
+    const on = ocrBtn.getAttribute("aria-checked") !== "true";
+    ocrBtn.setAttribute("aria-checked", String(on));
+    store("reader.scanOcr", on ? "on" : "off");
+    buzz("select");
   });
   $("sPdf").addEventListener("click", () => save("pdf"));
   $("sWord").addEventListener("click", () => save("word"));

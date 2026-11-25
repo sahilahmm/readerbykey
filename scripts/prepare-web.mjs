@@ -28,7 +28,19 @@ for (const dir of ["standard_fonts", "iccs", "wasm"]) {
   if (existsSync(join(pdfjs, dir))) cpSync(join(pdfjs, dir), join(out, dir), { recursive: true, filter: (src) => !skip.test(src) });
 }
 
-console.log("PDF.js copied to www/lib");
+// Text recognition (OCR) for the scanner: the engine, one WebAssembly core, and English + Bangla language data. All offline.
+{
+  const nm = join(root, "node_modules");
+  const ocr = join(out, "ocr");
+  mkdirSync(join(ocr, "core"), { recursive: true });
+  mkdirSync(join(ocr, "lang"), { recursive: true });
+  cpSync(join(nm, "tesseract.js", "dist", "tesseract.esm.min.js"), join(ocr, "tesseract.esm.min.js"));
+  cpSync(join(nm, "tesseract.js", "dist", "worker.min.js"), join(ocr, "worker.min.js"));
+  cpSync(join(nm, "tesseract.js-core", "tesseract-core-simd-lstm.wasm.js"), join(ocr, "core", "tesseract-core-simd-lstm.wasm.js"));
+  for (const l of ["eng", "ben"]) cpSync(join(nm, "@tesseract.js-data", l, "4.0.0_best_int", `${l}.traineddata.gz`), join(ocr, "lang", `${l}.traineddata.gz`));
+}
+
+console.log("PDF.js and OCR files copied to www/lib");
 
 // In CI the app's own scripts and styles are minified (about half the size). Local runs leave them readable.
 if (process.env.CI) {

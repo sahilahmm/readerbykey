@@ -330,7 +330,7 @@ const MODES = {
   open: ["open", "scan"], //                          nothing saved yet
   home: ["add", "scan"], //                 something is in Recent
   scan: ["sthumbs", "sok", "sx"], //          scanned pages
-  scansave: ["spdf", "sword", "sx"],
+  scansave: ["socr", "spdf", "sword", "sx"],
   scanedit: ["ecancel", "erot", "eapply"],
   select: ["share", "archive", "delete"], //  one or more files are selected
   share: ["pdf", "word", "no"],
