@@ -66,6 +66,12 @@
 
       <div class="seg" data-s="input"><input id="renameInput" type="text" maxlength="80" enterkeyhint="done" autocomplete="off" aria-label="New name" /></div>
       <div class="seg" data-s="msg"><div id="dockMsg" class="msg"></div></div>
+
+      <div class="seg" data-s="sthumbs"><div id="scanThumbs" class="thumbs"></div></div>
+      <div class="seg" data-s="sok"><button id="sOk" type="button" aria-label="Finish scan"><svg class="ic" viewBox="0 0 24 24"><use href="#i-check"/></svg></button></div>
+      <div class="seg" data-s="sx"><button id="sX" type="button" aria-label="Discard scan"><svg class="ic" viewBox="0 0 24 24"><use href="#i-x"/></svg></button></div>
+      <div class="seg" data-s="spdf"><button id="sPdf" type="button"><span>PDF</span></button></div>
+      <div class="seg" data-s="sword"><button id="sWord" type="button"><span>Word</span></button></div>
       <div class="seg" data-s="undo"><button id="bUndo" type="button">Undo</button></div>
       <div class="seg" data-s="pw"><input id="pwInput" type="password" maxlength="128" enterkeyhint="done" autocomplete="off" placeholder="Password" aria-label="PDF password" /></div>
       <div class="seg" data-s="yes"><button id="bYes" type="button" aria-label="Confirm"><svg class="ic" viewBox="0 0 24 24"><use href="#i-check"/></svg></button></div>
@@ -105,43 +111,7 @@
   </div>
 
   <!-- SCANNER (1.5) -->
-  <section id="scan" class="screen scan" hidden>
-    <div class="scan-top">
-      <button id="scanClose" class="scan-btn" type="button" aria-label="Close scanner"><svg class="ic" viewBox="0 0 24 24"><use href="#i-x"/></svg></button>
-      <span id="scanTitle" class="scan-title">Scan</span>
-      <span id="scanCount" class="scan-count" hidden></span>
-    </div>
-    <div id="scanStage" class="scan-stage">
-      <video id="scanVideo" playsinline muted></video>
-      <canvas id="scanCanvas" hidden></canvas>
-      <svg id="scanQuad" class="scan-quad" hidden><polygon id="scanPoly"/></svg>
-      <div id="scanHandles" class="scan-handles" hidden></div>
-      <div id="scanMsg" class="scan-msg" hidden></div>
-      <ul id="scanPages" class="scan-pages" hidden></ul>
-    </div>
-    <div id="scanLooks" class="scan-looks" hidden>
-      <button type="button" data-look="orig">Original</button>
-      <button type="button" data-look="doc">Document</button>
-      <button type="button" data-look="bw">B&amp;W</button>
-    </div>
-    <div class="scan-bar" data-s="camera">
-      <button id="scanGallery" class="scan-btn" type="button" aria-label="Choose a photo"><svg class="ic" viewBox="0 0 24 24"><use href="#i-image"/></svg></button>
-      <button id="scanShutter" class="scan-shutter" type="button" aria-label="Take photo"></button>
-      <button id="scanDone" class="scan-btn wide" type="button" hidden>Done</button>
-    </div>
-    <div class="scan-bar pill" data-s="edit" hidden>
-      <button id="scanRetake" type="button">Retake</button>
-      <button id="scanRotate" type="button" aria-label="Rotate"><svg class="ic" viewBox="0 0 24 24"><use href="#i-rotate"/></svg></button>
-      <button id="scanAdd" class="go" type="button"><svg class="ic" viewBox="0 0 24 24"><use href="#i-check"/></svg><span>Add page</span></button>
-    </div>
-    <div class="scan-bar pill" data-s="pages" hidden>
-      <button id="scanMore" type="button"><svg class="ic" viewBox="0 0 24 24"><use href="#i-plus"/></svg><span>Page</span></button>
-      <button id="scanPdf" class="go" type="button"><span>Save PDF</span></button>
-      <button id="scanWord" class="go" type="button"><span>Save Word</span></button>
-    </div>
-    <input id="scanFile" type="file" accept="image/*" multiple hidden />
-    <input id="scanCapture" type="file" accept="image/*" capture="environment" hidden />
-  </section>
+  <input id="scanCapture" type="file" accept="image/*" capture="environment" hidden />
 
   <div id="loading" class="loading" hidden>Opening…</div>
 

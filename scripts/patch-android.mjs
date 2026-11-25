@@ -114,12 +114,12 @@ ${patterns}
     if (!cond) throw new Error(`Hardening step failed: ${what}`);
   };
 
-  // no network at all: the app works fully offline, so it asks for no network permission (only the camera, for the scanner)
+  // no network at all: the app works fully offline, so it asks for no permissions
   x = x.replace(/\s*<uses-permission android:name="android\.permission\.INTERNET"\s*\/>/, "");
   x = x.replace(/<!--\s*Permissions\s*-->\s*/, "");
   if (!x.includes("xmlns:tools")) x = x.replace("<manifest ", '<manifest xmlns:tools="http://schemas.android.com/tools" ');
   // make sure no library adds it back during the manifest merge
-  x = x.replace("</manifest>", '    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-feature android:name="android.hardware.camera" android:required="false" />\n    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />\n</manifest>');
+  x = x.replace("</manifest>", '    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />\n</manifest>');
 
   // no cloud/device-transfer backups of your documents, no plain-text traffic
   must(/android:allowBackup="true"/.test(x), "allowBackup not found");

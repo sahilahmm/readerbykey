@@ -328,6 +328,8 @@ els.dock.querySelectorAll(".seg").forEach((e) => (seg[e.dataset.s] = e));
 const MODES = {
   open: ["open"], //                          nothing saved yet
   home: ["add", "remove"], //                 something is in Recent
+  scan: ["sthumbs", "sok", "sx"], //          scanned pages
+  scansave: ["spdf", "sword", "sx"],
   select: ["share", "rename", "archive"], //  one file is selected
   multi: ["share", "archive", "delete"], //   two or more are selected
   share: ["pdf", "word", "no"],
@@ -350,6 +352,7 @@ function setMode(name) {
 }
 
 function defaultMode() {
+  if (scanner && scanner.isOpen()) return "scan";
   if (state.sel.size > 1) return "multi";
   if (state.sel.size) return "select";
   if (state.view === "archive") return "archive";
@@ -879,7 +882,7 @@ let scanner = null;
 async function openScanner() {
   if (!scanner) {
     const { createScanner } = await import("./scan-ui.js");
-    scanner = createScanner({ openBlob, toast, buzz, loadExport, store });
+    scanner = createScanner({ openBlob, toast, buzz, loadExport, store, setMode, defaultMode, say: (t) => { els.dockMsg.textContent = t; setMode("msg"); } });
   }
   await scanner.open();
 }

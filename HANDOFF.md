@@ -37,13 +37,11 @@ PowerPoint viewing (shapes, text, tables, pictures, SmartArt, notes outline), Op
 ## Known limits
 Charts show as a labelled box; animations/transitions/media not played; old binary `.ppt` unsupported; fonts approximated; iOS builds untested on a real device.
 
-## Done in 1.5: Scanner
-- `www/scan.js`: `detectCorners`, `warp` (homography), `rotate`, `enhance` (orig/color/doc/bw), `toJpeg`, `makePdf` (hand-written PDF, one JPEG per page).
-- `www/scan-ui.js`: `createScanner(...)`, lazy-loaded from `openScanner()` in `app.js`; modes camera/edit/pages, draggable corners, look chips (`reader.scanLook`), up to 30 pages, save PDF or Word, then `openBlob` with id `scan|<time>`. Android back handled via `scanner.back()`. Gallery and `capture` inputs are the fallback when `getUserMedia` fails.
-- `export.js` `buildImageDocx` (Word = page pictures, no OCR). `SCAN_READY = true`; `#scanChip` shows when Recent is empty or beside the pill.
-- Native: CAMERA permission + optional camera features in `patch-android.mjs`; `NSCameraUsageDescription`/`NSPhotoLibraryUsageDescription` in `patch-ios.mjs`. Privacy docs updated.
-- Tested in Chromium with a fake camera and a tilted test photo. NOT tested on a real phone: Android WebView camera prompt, iOS WKWebView getUserMedia.
-- Ideas next: OCR (searchable PDF / editable Word), auto-capture, ID-card mode.
+## Done in 1.5 / 1.5.1: Scanner
+- 1.5.1 moved the scanner into the dock pill (no full-screen UI). Tap `#scanChip` -> `scanner.open()` clicks hidden `#scanCapture` (`capture="environment"`) so the phone's native camera app takes the photo. `www/scan-ui.js` `createScanner({..., setMode, defaultMode, say})`: photo -> "Processing…" -> `detectCorners`/`warp`/`enhance` automatically -> thumbnail in `#scanThumbs` (each with remove x, trailing + for another page). Dock modes `scan` (sthumbs, sok, sx) and `scansave` (spdf, sword, sx) in `MODES` in `app.js`; `defaultMode()` returns `scan` while a session is active. Save builds PDF (`makePdf`) or Word (`buildImageDocx`), then `openBlob` with id `scan|<time>`. Max 30 pages. Android back = discard.
+- `www/scan.js`: `detectCorners`, `warp`, `rotate`, `enhance` (orig/color/doc/bw, default doc via `reader.scanLook`), `toJpeg`, `makePdf`. No manual corner editing or look chips any more (removed with the old screen); the engine still supports them.
+- Word output = page pictures, no OCR. No CAMERA permission on Android (native camera app); iOS has `NSCameraUsageDescription`/`NSPhotoLibraryUsageDescription` in `patch-ios.mjs`.
+- Not tested on a real phone (Android capture intent / FileProvider, iOS). Ideas: OCR, corner adjust via long-press, look picker, gallery import.
 
 ## Added in 1.4.5.1 to 1.4.5.5
 - 1.4.5.1 premium haptics (`FEEL` table in `app.js`).
