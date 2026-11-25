@@ -121,15 +121,19 @@ export function createScanner({ openBlob, toast, buzz, loadExport, store, setMod
 
   // the phone's own camera app, opened directly (no file chooser); the file input is only the fallback
   async function shoot() {
-    const cam = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Camera;
+    const cap = window.Capacitor;
+    let cam = cap && cap.Plugins && cap.Plugins.Camera;
+    if (!cam && cap && cap.registerPlugin && cap.isNativePlatform && cap.isNativePlatform()) cam = cap.registerPlugin("Camera");
     if (!cam) return input.click();
     try {
       const r = await cam.getPhoto({ source: "CAMERA", resultType: "uri", quality: 95, correctOrientation: true, saveToGallery: false });
       const blob = await (await fetch(r.webPath)).blob();
       take(blob);
     } catch (e) {
-      // closing the camera without a photo is not an error
-      if (!/cancel/i.test(String((e && e.message) || e))) input.click();
+      const m = String((e && e.message) || e);
+      if (/cancel/i.test(m)) return; // closing the camera without a photo is not an error
+      toast(`Camera: ${m.slice(0, 60)}`);
+      setTimeout(() => input.click(), 1200);
     }
   }
 
