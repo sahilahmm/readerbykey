@@ -1,6 +1,4 @@
-### What's new in 1.6.1
+### What's new in 1.6.2
 
-- **Easier Archive swipe.** The swipe now works from the whole strip around the pill, and a shorter swipe is enough.
-- **Rename on the file.** Each file has a pen icon; tap it and the name becomes a field right there. The Rename button in the pill is gone.
-- **Bin is back in the pill.** Select files and the pill shows Share, Archive and a bin.
-- **Select all / Clear** now sits under the list of files instead of the top corner.
+- **Swipe anywhere.** Swipe left anywhere on the home screen to open the Archive. Inside the Archive, swipe right to go back, like the iPhone back gesture. The list follows your finger while you swipe.
+- The one-time hint now reads "Swipe left to open your Archive".

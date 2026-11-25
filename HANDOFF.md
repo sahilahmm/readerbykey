@@ -38,7 +38,7 @@ PowerPoint viewing (shapes, text, tables, pictures, SmartArt, notes outline), Op
 Charts show as a labelled box; animations/transitions/media not played; old binary `.ppt` unsupported; fonts approximated; iOS builds untested on a real device.
 
 ## UI in 1.6
-1.6.1: swipe zone is the strip above the pill (document-level pointer events), rename = pen on each card (`startRename`, inline field), bin is the `delete` seg in the pill, `#allChip` sits under the list.
+1.6.2: swipe left anywhere on home (`swipeHome`, document-level pointer events, shelf follows the finger; right in the Archive to return), rename = pen on each card (`startRename`, inline field), bin is the `delete` seg in the pill, `#allChip` sits under the list.
 Settings menu (`#setBtn`, `#menu`: Vibration `reader.haptics`, Dark mode). Pill: open/add + camera (`#bScan`). Selecting shows `#delChip` (bin) + `#allChip` (Select all/Clear) in the tools row. Archive = swipe the dock left (`swipePill` in app.js; right to return), list slides via `.out-left/.out-right`. CI minifies www js/css with esbuild (`prepare-web.mjs`, only when `CI` is set; do not run it locally with CI=1 without committing first, it rewrites files).
 
 ## Done in 1.5 / 1.5.1: Scanner
