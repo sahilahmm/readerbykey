@@ -1,7 +1,6 @@
-### What's new in 1.6
+### What's new in 1.6.1
 
-- **Settings.** A button in the top-right corner opens a small menu with a Vibration switch and a Dark mode switch. The moon button is gone from the list area.
-- **New pill.** Tap **+** to open a document or the **camera** to scan. The cross that used to remove the last file is gone.
-- **Remove with the bin.** When you select files, a bin button (Remove) and Select all / Clear appear at the top-left, where the moon used to be.
-- **Archive by swiping the pill.** Swipe the pill left and the list slides across to the Archive; swipe right inside the Archive to come back.
-- **Lighter.** Unused code and icons removed and the app's own scripts and styles are minified.
+- **Easier Archive swipe.** The swipe now works from the whole strip around the pill, and a shorter swipe is enough.
+- **Rename on the file.** Each file has a pen icon; tap it and the name becomes a field right there. The Rename button in the pill is gone.
+- **Bin is back in the pill.** Select files and the pill shows Share, Archive and a bin.
+- **Select all / Clear** now sits under the list of files instead of the top corner.

@@ -661,7 +661,7 @@ els.list.addEventListener("click", (e) => {
     press = null; // this click is just the end of a long-press
     return;
   }
-  if (e.target.closest(".card-edit")) return;
+  if (e.target.closest(".card-edit, .editing")) return;
   const pen = e.target.closest(".pen");
   if (pen) return startRename(pen.closest(".card"));
   const pin = e.target.closest(".pin");
@@ -777,12 +777,14 @@ function startRename(li) {
   inp.enterKeyHint = "done";
   inp.setAttribute("aria-label", "New name");
   title.replaceWith(inp);
+  li.classList.add("editing");
   inp.focus();
   inp.select();
   let done = false;
   const finish = async (save) => {
     if (done) return;
     done = true;
+    setTimeout(() => li.classList.remove("editing"), 0);
     const name = inp.value.trim().replace(DOC_EXT, "");
     if (!save || !name || name === stripExt(m.name)) return inp.replaceWith(title);
     await putMeta({ ...m, name: `${name}${extOf(m)}` });
@@ -799,6 +801,8 @@ function startRename(li) {
       inp.blur();
     } else if (e.key === "Escape") finish(false);
   });
+  // the field sits inside the card button: a space must stay a space, not press the card
+  inp.addEventListener("keyup", (e) => e.key === " " && e.preventDefault());
   inp.addEventListener("blur", () => finish(true));
 }
 
