@@ -35,12 +35,12 @@ const paged = (kind) => kind === "pdf" || kind === "pptx"; // read page by page
 const $ = (id) => document.getElementById(id);
 const els = Object.fromEntries(
   [
-    "home", "reader", "shelf", "list", "empty", "hero", "greeting", "viewLabel", "tools", "themeLabel", "archiveChip", "scanChip", "allChip", "groupChip", "dock", "fileInput",
-    "bOpen", "bAdd", "bRemove", "bShare", "bRename", "bArchive", "bDelete", "archiveLabel",
+    "home", "reader", "shelf", "list", "empty", "hero", "greeting", "viewLabel", "tools", "allChip", "delChip", "setBtn", "menu", "optVib", "optDark", "bScan", "groupChip", "dock", "fileInput",
+    "bOpen", "bAdd", "bShare", "bRename", "bArchive", "archiveLabel",
     "bPdf", "bWord", "bYes", "bNo", "bBack", "renameInput", "dockMsg",
     "bar", "title", "backBtn", "textBtn", "nightBtn", "zoomIn", "zoomOut",
     "scroller", "pages", "textView", "pill", "sheet", "jumpForm", "jumpInput",
-    "loading", "themeBtn", "bUndo", "pwInput",
+    "loading", "bUndo", "pwInput",
   ].map((id) => [id, $(id)])
 );
 
@@ -185,6 +185,7 @@ const FEEL = {
 const FALLBACK = { tap: [8], soft: [8, 30, 8], medium: [14], heavy: [24], select: [5], tick: [4], double: [14, 40, 8], ok: [10, 40, 16], warn: [18, 50, 18] };
 let lastBuzz = 0;
 function buzz(kind = "tap") {
+  if (store("reader.haptics") === "off") return;
   const now = Date.now();
   if (now - lastBuzz < (kind === "tick" ? 90 : 35)) return;
   lastBuzz = now;
@@ -214,11 +215,11 @@ document.addEventListener(
   (e) => {
     const t = e.target.closest && e.target.closest("button, .dot, .pin, .card");
     if (!t) return;
-    if (t.matches("#themeBtn, #nightBtn, #textBtn")) buzz("medium");
+    if (t.matches("#optDark, #optVib, #setBtn, #nightBtn, #textBtn")) buzz("medium");
     else if (t.matches(".pin")) buzz("double");
     else if (t.matches("#zoomIn, #zoomOut, .dot")) buzz("select");
     else if (t.matches("#pill")) buzz("soft");
-    else if (t.matches("#bArchive, #bShare, #bRename, #bOpen, #bAdd")) buzz("ok");
+    else if (t.matches("#bArchive, #bShare, #bRename, #bOpen, #bAdd, #bScan")) buzz("ok");
     else buzz("tap");
   },
   true
@@ -326,12 +327,12 @@ const seg = {};
 els.dock.querySelectorAll(".seg").forEach((e) => (seg[e.dataset.s] = e));
 
 const MODES = {
-  open: ["open"], //                          nothing saved yet
-  home: ["add", "remove"], //                 something is in Recent
+  open: ["open", "scan"], //                          nothing saved yet
+  home: ["add", "scan"], //                 something is in Recent
   scan: ["sthumbs", "sok", "sx"], //          scanned pages
   scansave: ["spdf", "sword", "sx"],
   select: ["share", "rename", "archive"], //  one file is selected
-  multi: ["share", "archive", "delete"], //   two or more are selected
+  multi: ["share", "archive"], //   two or more are selected
   share: ["pdf", "word", "no"],
   rename: ["input", "yes"],
   confirm: ["msg", "yes", "no"],
@@ -513,7 +514,6 @@ async function refreshHome(settle = true) {
   els.list.scrollTop = els.list.scrollHeight;
   markSel();
 
-  els.archiveChip.textContent = `Archive · ${archived.length}`;
   els.viewLabel.textContent = `Archive · ${archived.length}`;
   els.groupChip.textContent = state.group === "type" ? "Group: Type" : "Group: Date";
 
@@ -522,24 +522,17 @@ async function refreshHome(settle = true) {
     els.shelf.classList.remove("leaving");
     els.shelf.animate([{ opacity: 0, transform: "translateY(8px)" }, { opacity: 1, transform: "none" }], { duration: 320, easing: "ease-out", delay: 120, fill: "backwards" });
   }
-  resetThemeMorph();
   if (settle) setMode(defaultMode());
   maybeNudge();
 }
 
-// the tools row above the files: the theme button turns into Select all / Clear while you select
+// the tools row above the files: a bin and Select all / Clear appear while you select
 function paintTools() {
   const n = state.sel.size;
-  const canAll = n > 0 && state.shown.length > 1;
-  els.allChip.hidden = !canAll;
-  els.themeBtn.hidden = canAll;
+  els.delChip.hidden = !n;
+  els.allChip.hidden = !(n > 0 && state.shown.length > 1);
   els.allChip.textContent = n >= state.shown.length ? "Clear" : "Select all";
-  // no Archive button until you swipe: the theme button wears a thin blue line when there is one
-  els.archiveChip.hidden = true;
-  els.themeBtn.classList.toggle("has-archive", !!state.archivedCount && state.view !== "archive");
-  els.themeLabel.textContent = `Archive · ${state.archivedCount}`;
   els.groupChip.hidden = n > 0 || state.view !== "archive";
-  els.scanChip.hidden = !SCAN_READY || n > 0 || state.view === "archive";
   els.viewLabel.hidden = state.view !== "archive";
 }
 
@@ -686,15 +679,7 @@ const pickFile = () => els.fileInput.click();
 els.bOpen.addEventListener("click", pickFile);
 els.bAdd.addEventListener("click", pickFile);
 
-els.bRemove.addEventListener("click", () => {
-  const last = state.live[state.live.length - 1];
-  if (!last) return;
-  state.pending = { type: "remove", ids: [last.id] };
-  els.dockMsg.textContent = `Remove “${stripExt(last.name)}”?`;
-  setMode("confirm");
-});
-
-els.bDelete.addEventListener("click", () => {
+els.delChip.addEventListener("click", () => {
   const ids = [...state.sel];
   if (!ids.length) return;
   buzz("warn");
@@ -862,22 +847,19 @@ async function shareSelected(how) {
   }
 }
 
-// moving between Recent and the Archive: the shelf fades down, swaps, and rises back in
+// moving between Recent and the Archive: the list slides out one side and the other comes in from the opposite side
 async function switchView(view) {
   if (state.view === view) return;
-  els.shelf.classList.add("leaving");
-  await new Promise((r) => setTimeout(r, 140));
+  const toArchive = view === "archive";
+  els.shelf.classList.add(toArchive ? "out-left" : "out-right");
+  await new Promise((r) => setTimeout(r, 160));
   state.view = view;
   state.sel.clear();
   await refreshHome();
-  els.shelf.classList.remove("leaving");
-  els.shelf.animate([{ opacity: 0, transform: "translateY(10px)" }, { opacity: 1, transform: "none" }], { duration: 260, easing: "ease-out" });
+  els.shelf.classList.remove("out-left", "out-right");
+  els.shelf.animate([{ opacity: 0, transform: `translateX(${toArchive ? 48 : -48}px)` }, { opacity: 1, transform: "none" }], { duration: 280, easing: "ease-out" });
 }
-els.archiveChip.addEventListener("click", () => switchView("archive"));
 
-// Swipe the theme button to the right: it stretches into the Archive button under your thumb.
-// Let go past the halfway point to open the Archive, otherwise it shrinks back into the theme button.
-const SCAN_READY = true;
 let scanner = null;
 async function openScanner() {
   if (!scanner) {
@@ -886,77 +868,58 @@ async function openScanner() {
   }
   await scanner.open();
 }
-els.scanChip.addEventListener("click", openScanner);
-let themeDragUntil = 0; // a tap right after a drag is part of the drag, not a theme toggle
-const swipe = (function swipeToArchive() {
-  const btn = els.themeBtn;
-  const FULL = 150; // px of drag for the button to become the full Archive button
+els.bScan.addEventListener("click", openScanner);
+
+// Swipe the pill to the left to slide into the Archive; swipe it right inside the Archive to come back.
+let dockDragUntil = 0; // a tap that ends a drag is part of the drag
+(function swipePill() {
+  const d = els.dock;
   let start = null, dx = 0, moved = false;
-  const paint = (p) => {
-    btn.style.setProperty("--p", p.toFixed(3));
-    btn.style.width = `${48 + p * 120}px`;
-  };
-  const reset = () => {
-    btn.classList.remove("dragging", "morphed");
-    btn.classList.add("snap");
-    btn.style.removeProperty("--p");
-    btn.style.width = "";
-    delete btn.dataset.armed;
-  };
-  btn.addEventListener("pointerdown", (e) => {
-    if (state.view === "archive") return; // the swipe only opens the Archive; inside it the button is just the theme button
+  d.addEventListener("pointerdown", (e) => {
+    if (["input", "pw", "scan", "scansave"].includes(state.mode)) return;
     start = { x: e.clientX, y: e.clientY, id: e.pointerId };
     dx = 0;
     moved = false;
-    btn.classList.remove("snap");
+    d.classList.remove("snap");
   });
-  btn.addEventListener("pointermove", (e) => {
+  d.addEventListener("pointermove", (e) => {
     if (!start || e.pointerId !== start.id) return;
     dx = e.clientX - start.x;
-    if (!moved && dx > 8 && dx > Math.abs(e.clientY - start.y)) {
+    if (!moved && Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(e.clientY - start.y)) {
       moved = true;
-      btn.setPointerCapture(e.pointerId);
-      btn.classList.add("dragging", "morphed");
+      d.setPointerCapture(e.pointerId);
+      d.classList.add("drag");
     }
-    if (!moved) return;
-    const p = Math.max(0, Math.min(dx / FULL, 1));
-    paint(p);
-    if (p > 0.55 && !btn.dataset.armed) {
-      btn.dataset.armed = "1";
-      buzz("select"); // you can feel the point where letting go opens it
-    } else if (p <= 0.55) delete btn.dataset.armed;
+    if (moved) d.style.transform = `translateX(calc(-50% + ${Math.max(-90, Math.min(90, dx * 0.5))}px))`;
   });
   const end = () => {
     if (!start) return;
-    const open = moved && dx / FULL > 0.55;
-    const wasMoved = moved;
+    const was = moved, go = dx;
     start = null;
-    if (wasMoved) {
-      themeDragUntil = Date.now() + 450;
-      store("reader.swipeHint", "1");
-    }
-    reset();
-    if (open) {
-      if (state.archivedCount && state.view !== "archive") {
+    d.classList.remove("drag");
+    d.classList.add("snap");
+    d.style.transform = "";
+    if (!was) return;
+    dockDragUntil = Date.now() + 400;
+    store("reader.swipeHint", "1");
+    if (go < -60 && state.view !== "archive") {
+      if (state.archivedCount) {
         buzz("double");
         switchView("archive");
       } else flash("Archive is empty");
+    } else if (go > 60 && state.view === "archive") {
+      buzz("double");
+      switchView("recent");
     }
   };
-  btn.addEventListener("pointerup", end);
-  btn.addEventListener("pointercancel", end);
-  btn.addEventListener("lostpointercapture", end);
-  return { paint, reset };
+  d.addEventListener("pointerup", end);
+  d.addEventListener("pointercancel", end);
+  d.addEventListener("lostpointercapture", end);
+  d.addEventListener("click", (e) => Date.now() < dockDragUntil && (e.stopPropagation(), e.preventDefault()), true);
 })();
 els.bBack.addEventListener("click", () => switchView("recent"));
 
-function resetThemeMorph() {
-  els.themeBtn.classList.remove("dragging", "morphed", "snap");
-  els.themeBtn.style.removeProperty("--p");
-  els.themeBtn.style.width = "";
-}
-
-// The first time something is archived, the theme button stretches a little and springs back,
+// The first time something is archived, the pill slides a little to the left and springs back,
 // with a line in the pill, so the swipe gets discovered. It only ever plays once.
 let nudgeTimer = 0;
 function maybeNudge() {
@@ -965,20 +928,12 @@ function maybeNudge() {
   nudgeTimer = setTimeout(() => {
     if (store("reader.swipeHint") || state.view !== "recent" || els.home.hidden || state.sel.size) return;
     store("reader.swipeHint", "1");
-    toast("Swipe the moon right to open your Archive");
-    const btn = els.themeBtn;
-    btn.classList.remove("snap");
-    btn.classList.add("morphed", "dragging");
-    const t0 = performance.now(), D = 1500;
-    const step = (now) => {
-      const x = Math.min((now - t0) / D, 1);
-      const p = 0.62 * Math.sin(Math.PI * x) ** 0.6; // out, hold a moment, back
-      swipe.paint(p);
-      if (x < 1) requestAnimationFrame(step);
-      else resetThemeMorph();
-    };
+    toast("Swipe the pill left to open your Archive");
+    const d = els.dock;
+    d.classList.add("snap");
+    setTimeout(() => (d.style.transform = "translateX(calc(-50% - 34px))"), 700);
+    setTimeout(() => (d.style.transform = ""), 1300);
     buzz("select");
-    requestAnimationFrame(step);
   }, 900);
 }
 
@@ -1745,8 +1700,7 @@ function currentTheme() {
 }
 function paintTheme(save) {
   const dark = currentTheme() === "dark";
-  els.themeBtn.querySelector("use").setAttribute("href", dark ? "#i-sun" : "#i-moon");
-  els.themeBtn.setAttribute("aria-label", dark ? "Switch to light theme" : "Switch to dark theme");
+  els.optDark.setAttribute("aria-checked", String(dark));
   try {
     const bars = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.SystemBars;
     // DARK = light icons for a dark screen
@@ -1756,8 +1710,7 @@ function paintTheme(save) {
   }
   if (save) store("reader.theme", dark ? "dark" : "light");
 }
-els.themeBtn.addEventListener("click", () => {
-  if (Date.now() < themeDragUntil) return;
+els.optDark.addEventListener("click", () => {
   const next = currentTheme() === "dark" ? "light" : "dark";
   document.documentElement.setAttribute("data-theme", next);
   paintTheme(true);
@@ -1765,6 +1718,28 @@ els.themeBtn.addEventListener("click", () => {
   if (store("reader.night") === null) state.night = next === "dark";
 });
 paintTheme(false);
+
+// the settings menu
+const menuOpen = (on) => {
+  els.menu.hidden = !on;
+  els.setBtn.setAttribute("aria-expanded", String(on));
+};
+els.setBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  menuOpen(els.menu.hidden);
+});
+document.addEventListener("click", (e) => {
+  if (!els.menu.hidden && !e.target.closest("#menu")) menuOpen(false);
+});
+els.optVib.setAttribute("aria-checked", String(store("reader.haptics") !== "off"));
+els.optVib.addEventListener("click", () => {
+  const on = els.optVib.getAttribute("aria-checked") !== "true";
+  els.optVib.setAttribute("aria-checked", String(on));
+  if (on) {
+    store("reader.haptics", "on");
+    buzz("ok");
+  } else store("reader.haptics", "off");
+});
 
 function applyNight(on) {
   state.night = on;
@@ -1896,6 +1871,7 @@ const capApp = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.
 if (capApp && capApp.addListener) {
   capApp.addListener("backButton", () => {
     if (scanner && scanner.isOpen()) scanner.back();
+    else if (!els.menu.hidden) menuOpen(false);
     else if (!els.sheet.hidden) closeSheet();
     else if (state.open) goHome();
     else if (state.mode === "pw") answerPassword(null);
