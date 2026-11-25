@@ -879,57 +879,59 @@ async function openScanner() {
 }
 els.bScan.addEventListener("click", openScanner);
 
-// Swipe the pill to the left to slide into the Archive; swipe it right inside the Archive to come back.
-let dockDragUntil = 0; // a tap that ends a drag is part of the drag
-(function swipePill() {
-  const d = els.dock;
+// Swipe left anywhere on the home screen to slide into the Archive; swipe right inside the Archive to come back,
+// like the back gesture on an iPhone.
+let swipeUntil = 0; // the tap that ends a swipe is part of the swipe
+(function swipeHome() {
+  const sh = els.shelf;
   let start = null, dx = 0, moved = false;
-  // the whole strip around the pill counts, so the swipe doesn't need aim
   document.addEventListener("pointerdown", (e) => {
-    if (els.home.hidden || ["pw", "scan", "scansave"].includes(state.mode) || e.clientY < d.getBoundingClientRect().top - 90) return;
+    if (els.home.hidden || !e.isPrimary || ["pw", "scan", "scansave"].includes(state.mode)) return;
+    if (e.target.closest("input, #menu, #setBtn, .dot")) return;
     start = { x: e.clientX, y: e.clientY, id: e.pointerId };
     dx = 0;
     moved = false;
-    d.classList.remove("snap");
   });
   document.addEventListener("pointermove", (e) => {
     if (!start || e.pointerId !== start.id) return;
     dx = e.clientX - start.x;
-    if (!moved && Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(e.clientY - start.y)) {
+    const want = state.view === "archive" ? dx > 0 : dx < 0; // only the direction that leads somewhere
+    if (!moved && want && Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(e.clientY - start.y) * 1.5) {
       moved = true;
-      d.setPointerCapture(e.pointerId);
-      d.classList.add("drag");
+      try {
+        els.dock.setPointerCapture(e.pointerId);
+      } catch {}
+      sh.style.transition = "none";
     }
-    if (moved) d.style.transform = `translateX(calc(-50% + ${Math.max(-90, Math.min(90, dx * 0.5))}px))`;
+    if (moved) sh.style.transform = `translateX(${Math.max(-80, Math.min(80, dx * 0.4))}px)`;
   });
   const end = () => {
     if (!start) return;
     const was = moved, go = dx;
     start = null;
-    d.classList.remove("drag");
-    d.classList.add("snap");
-    d.style.transform = "";
     if (!was) return;
-    dockDragUntil = Date.now() + 400;
+    sh.style.transition = "";
+    sh.style.transform = "";
+    swipeUntil = Date.now() + 400;
     store("reader.swipeHint", "1");
-    if (go < -40 && state.view !== "archive") {
+    if (go < -50 && state.view !== "archive") {
       if (state.archivedCount) {
         buzz("double");
         switchView("archive");
       } else flash("Archive is empty");
-    } else if (go > 40 && state.view === "archive") {
+    } else if (go > 50 && state.view === "archive") {
       buzz("double");
       switchView("recent");
     }
   };
   document.addEventListener("pointerup", end);
   document.addEventListener("pointercancel", end);
-  d.addEventListener("lostpointercapture", end);
-  document.addEventListener("click", (e) => Date.now() < dockDragUntil && (e.stopPropagation(), e.preventDefault()), true);
+  els.dock.addEventListener("lostpointercapture", end);
+  document.addEventListener("click", (e) => Date.now() < swipeUntil && (e.stopPropagation(), e.preventDefault()), true);
 })();
 els.bBack.addEventListener("click", () => switchView("recent"));
 
-// The first time something is archived, the pill slides a little to the left and springs back,
+// The first time something is archived, the list slides a little to the left and springs back,
 // with a line in the pill, so the swipe gets discovered. It only ever plays once.
 let nudgeTimer = 0;
 function maybeNudge() {
@@ -938,11 +940,12 @@ function maybeNudge() {
   nudgeTimer = setTimeout(() => {
     if (store("reader.swipeHint") || state.view !== "recent" || els.home.hidden || state.sel.size) return;
     store("reader.swipeHint", "1");
-    toast("Swipe the pill left to open your Archive");
-    const d = els.dock;
-    d.classList.add("snap");
-    setTimeout(() => (d.style.transform = "translateX(calc(-50% - 34px))"), 700);
-    setTimeout(() => (d.style.transform = ""), 1300);
+    toast("Swipe left to open your Archive");
+    const sh = els.shelf;
+    sh.style.transition = "transform 0.35s ease";
+    setTimeout(() => (sh.style.transform = "translateX(-34px)"), 700);
+    setTimeout(() => (sh.style.transform = ""), 1300);
+    setTimeout(() => (sh.style.transition = ""), 1700);
     buzz("select");
   }, 900);
 }
