@@ -366,4 +366,3 @@ export async function shareFiles(items, title) {
   }
 }
 
-export const shareFile = (blob, filename, mime, title) => shareFiles([{ blob, filename, mime }], title);

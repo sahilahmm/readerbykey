@@ -3,8 +3,6 @@
    Corners are concentric: an inner radius is always (outer radius - the padding between them). */
 
 :root {
-  --cream: #F3E9D7;
-  --mocha: #7A553A;
 
   --bg: #F3E9D7;
   --ink: #7A553A;
@@ -345,7 +343,7 @@ button { font: inherit; color: inherit; }
   transition: flex-grow 0.42s cubic-bezier(0.3, 0.8, 0.2, 1), opacity 0.3s ease 0.1s, visibility 0s;
 }
 .seg[data-s="add"].on, .seg[data-s="open"].on { flex-grow: 3; }
-.seg[data-s="msg"].on, .seg[data-s="input"].on, .seg[data-s="pw"].on { flex-grow: 5; }
+.seg[data-s="msg"].on, .seg[data-s="pw"].on { flex-grow: 5; }
 .seg[data-s="undo"].on { flex-grow: 2; }
 .seg[data-s="delete"].on { flex-grow: 0.55; }
 

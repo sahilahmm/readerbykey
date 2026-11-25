@@ -9,7 +9,7 @@ export async function startOcr() {
     corePath: new URL("./lib/ocr/core/", import.meta.url).href,
     langPath: new URL("./lib/ocr/lang/", import.meta.url).href,
     workerBlobURL: false,
-    gzip: true,
+    gzip: false,
     cacheMethod: "none", // the language files are already inside the app
   });
   return worker;

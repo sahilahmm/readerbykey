@@ -1,6 +1,7 @@
 // Copies PDF.js (legacy build, works on older Android WebViews) into www/lib
 // so the app works fully offline. Run before `cap sync`.
-import { cpSync, mkdirSync, rmSync, existsSync } from "node:fs";
+import { cpSync, mkdirSync, rmSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { gunzipSync } from "node:zlib";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -38,7 +39,8 @@ for (const dir of ["standard_fonts", "iccs", "wasm"]) {
   cpSync(join(nm, "tesseract.js", "dist", "worker.min.js"), join(ocr, "worker.min.js"));
   // the engine picks the fastest core the phone supports; older WebViews use the plain SIMD one
   for (const c of ["relaxedsimd-lstm", "simd-lstm"]) cpSync(join(nm, "tesseract.js-core", `tesseract-core-${c}.wasm.js`), join(ocr, "core", `tesseract-core-${c}.wasm.js`));
-  for (const l of ["eng", "ben"]) cpSync(join(nm, "@tesseract.js-data", l, "4.0.0_best_int", `${l}.traineddata.gz`), join(ocr, "lang", `${l}.traineddata.gz`));
+  // language files are unzipped here: the app package compresses them anyway, and a plain name loads the same everywhere
+  for (const l of ["eng", "ben"]) writeFileSync(join(ocr, "lang", `${l}.traineddata`), gunzipSync(readFileSync(join(nm, "@tesseract.js-data", l, "4.0.0_best_int", `${l}.traineddata.gz`))));
 }
 
 console.log("PDF.js and OCR files copied to www/lib");

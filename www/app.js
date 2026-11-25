@@ -35,10 +35,10 @@ const paged = (kind) => kind === "pdf" || kind === "pptx"; // read page by page
 const $ = (id) => document.getElementById(id);
 const els = Object.fromEntries(
   [
-    "home", "reader", "shelf", "list", "empty", "hero", "greeting", "viewLabel", "tools", "allChip", "setBtn", "menu", "optVib", "optDark", "bScan", "groupChip", "dock", "fileInput",
+    "home", "reader", "shelf", "list", "hero", "greeting", "viewLabel", "allChip", "setBtn", "menu", "optVib", "optDark", "bScan", "groupChip", "dock", "fileInput",
     "bOpen", "bAdd", "bShare", "bDelete", "bArchive", "archiveLabel",
     "bPdf", "bWord", "bYes", "bNo", "bBack", "dockMsg",
-    "bar", "title", "backBtn", "textBtn", "nightBtn", "zoomIn", "zoomOut",
+    "title", "backBtn", "textBtn", "nightBtn", "zoomIn", "zoomOut",
     "scroller", "pages", "textView", "pill", "sheet", "jumpForm", "jumpInput",
     "loading", "bUndo", "pwInput",
   ].map((id) => [id, $(id)])
@@ -444,7 +444,7 @@ function cardFor(m) {
     pin.className = "pin";
     pin.setAttribute("aria-label", m.pinned ? "Unpin" : "Pin to the bottom");
     pin.setAttribute("aria-pressed", String(!!m.pinned));
-    pin.innerHTML = '<svg class="ic" viewBox="0 0 24 24"><path d="M9 4h6l-1 6 3 3H7l3-3-1-6zM12 13v7"/></svg>';
+    pin.innerHTML = '<svg class="ic" viewBox="0 0 24 24"><use href="#i-pin"/></svg>';
     li.append(main, pen, pin, dot);
     li.classList.toggle("pinned", !!m.pinned);
   } else li.append(main, pen, dot);
