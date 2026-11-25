@@ -29,3 +29,21 @@ for (const dir of ["standard_fonts", "iccs", "wasm"]) {
 }
 
 console.log("PDF.js copied to www/lib");
+
+// In CI the app's own scripts and styles are minified (about half the size). Local runs leave them readable.
+if (process.env.CI) {
+  const { transformSync } = await import("esbuild");
+  const { readdirSync, readFileSync, writeFileSync } = await import("node:fs");
+  const www = join(root, "www");
+  let before = 0, after = 0;
+  for (const f of readdirSync(www)) {
+    const loader = f.endsWith(".js") ? "js" : f.endsWith(".css") ? "css" : null;
+    if (!loader) continue;
+    const src = readFileSync(join(www, f), "utf8");
+    const min = transformSync(src, { loader, minify: true, target: "es2020", legalComments: "none" }).code;
+    writeFileSync(join(www, f), min);
+    before += src.length;
+    after += min.length;
+  }
+  console.log(`minified app code: ${before} -> ${after} bytes`);
+}
