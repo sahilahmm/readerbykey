@@ -174,6 +174,20 @@ const code = parseInt(process.env.VERSION_CODE || "1", 10);
 const name = process.env.VERSION_NAME || "1.0";
 let gradle = readFileSync(gradleFile, "utf8");
 gradle = gradle.replace(/versionCode \d+/, `versionCode ${code}`).replace(/versionName "[^"]*"/, `versionName "${name}"`);
+// 7. shrink the app: R8 removes unused Java/Kotlin code and unused resources (the biggest size win), with keep rules for Capacitor's plugin bridge
+must(/minifyEnabled false/.test(gradle), "minifyEnabled not found");
+gradle = gradle.replace("minifyEnabled false", "minifyEnabled true\n            shrinkResources true");
 writeFileSync(gradleFile, gradle);
+const rules = join(root, "android", "app", "proguard-rules.pro");
+const keep = `
+-keep class com.getcapacitor.** { *; }
+-keep class com.capacitorjs.plugins.** { *; }
+-keep class com.keybysah.** { *; }
+-keep @com.getcapacitor.annotation.CapacitorPlugin public class * { @com.getcapacitor.annotation.PermissionCallback <methods>; @com.getcapacitor.annotation.ActivityCallback <methods>; @com.getcapacitor.PluginMethod public <methods>; }
+-keepclassmembers class * { @android.webkit.JavascriptInterface <methods>; }
+-keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod
+-dontwarn **
+`;
+writeFileSync(rules, (existsSync(rules) ? readFileSync(rules, "utf8") : "") + keep);
 
 console.log(`Patched Android project (versionCode ${code}, versionName ${name})`);

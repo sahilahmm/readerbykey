@@ -240,3 +240,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "v$VERSION_NAME" dist/Reader-by-Key-unsigned.ipa dist/Reader-by-Key-unsigned.ipa.sha256 --clobber
+
+  testdraft:
+    # test branches only: a private draft so the APK can be fetched, never public
+    needs: build
+    if: github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Reader-by-Key-apk
+          path: dist
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "test-$GITHUB_SHA" "dist/$APK_NAME" --draft --prerelease --title "test build" --notes "private test build" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA"
