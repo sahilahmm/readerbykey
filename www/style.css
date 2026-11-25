@@ -615,7 +615,7 @@ button { font: inherit; color: inherit; }
 .opt { width: 44px; height: 44px; padding: 0; border-radius: 50%; display: grid; place-items: center; background: var(--soft); border: 1px solid var(--line); color: var(--ink); opacity: 0.75; animation: rise 0.2s ease both; }
 .opt:nth-child(2) { animation-delay: 0.05s; }
 .opt .ic { width: 22px; height: 22px; }
-.opt[aria-checked="true"] { background: var(--accent); border-color: var(--accent); color: #fff; opacity: 1; }
+.opt[aria-checked="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); opacity: 1; }
 .opt .slash { stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; }
 .opt[aria-checked="true"] .slash { display: none; }
 #home { touch-action: pan-y; }

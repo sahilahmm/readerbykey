@@ -1,5 +1,5 @@
-### What's new in 1.6.5
+### What's new in 1.6.6
 
-- **Adjust a scan.** Hold a page thumbnail in the pill and its photo opens with four corner handles, so you can fix the crop. Rotate it a quarter turn with the rotate button, then tick to apply or × to cancel.
-- **Reorder pages.** Drag a thumbnail sideways in the pill to move it earlier or later.
-- Your original photo is kept (small) while you scan, so a page can be adjusted again at any time.
+- **New BareBones logo** on the empty screen, smaller and cleaner.
+- **Settings are icons only.** Tap the settings button and two round icons appear: vibration and dark mode. Lit means on; the vibration icon is struck through when off.
+- **BareBones copyright.** Added a LICENSE (all rights reserved) and a DESIGN.md describing the design philosophy, and the privacy page now names BareBones.
