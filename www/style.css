@@ -630,7 +630,7 @@ button { font: inherit; color: inherit; }
 }
 .thumbs::-webkit-scrollbar { display: none; }
 .thumbs .t { position: relative; flex: 0 0 auto; height: calc(100% - 12px); aspect-ratio: 3 / 4; border-radius: 10px; overflow: hidden; background: #fff; }
-.thumbs .t img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.thumbs .t img { -webkit-user-drag: none; user-select: none; pointer-events: none; width: 100%; height: 100%; object-fit: cover; display: block; }
 .thumbs .t button { position: absolute; right: 2px; top: 2px; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%; background: rgba(0,0,0,.6); color: #fff; display: grid; place-items: center; }
 .thumbs .t button .ic { width: 11px; height: 11px; }
 .thumbs .plus { flex: 0 0 auto; height: calc(100% - 12px); aspect-ratio: 1; border: 0; border-radius: 10px; background: transparent; color: inherit; display: grid; place-items: center; }

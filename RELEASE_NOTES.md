@@ -1,4 +1,5 @@
-### What's new in 1.6.2
+### What's new in 1.6.5
 
-- **Swipe anywhere.** Swipe left anywhere on the home screen to open the Archive. Inside the Archive, swipe right to go back, like the iPhone back gesture. The list follows your finger while you swipe.
-- The one-time hint now reads "Swipe left to open your Archive".
+- **Adjust a scan.** Hold a page thumbnail in the pill and its photo opens with four corner handles, so you can fix the crop. Rotate it a quarter turn with the rotate button, then tick to apply or × to cancel.
+- **Reorder pages.** Drag a thumbnail sideways in the pill to move it earlier or later.
+- Your original photo is kept (small) while you scan, so a page can be adjusted again at any time.

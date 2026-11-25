@@ -25,6 +25,7 @@ export function createScanner({ openBlob, toast, buzz, loadExport, store, setMod
       const img = document.createElement("img");
       img.src = p.url;
       img.alt = `Page ${pages.indexOf(p) + 1}`;
+      img.draggable = false;
       const x = document.createElement("button");
       x.type = "button";
       x.setAttribute("aria-label", "Remove page");
