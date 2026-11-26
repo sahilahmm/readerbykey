@@ -21,28 +21,16 @@ export function detectCorners(source) {
   for (let i = 0; i < w * h; i++) gray[i] = data[i * 4] * 0.299 + data[i * 4 + 1] * 0.587 + data[i * 4 + 2] * 0.114;
   gray = boxBlur(boxBlur(gray, w, h, 2), w, h, 2);
 
-  // Otsu threshold
-  const hist = new Float64Array(256);
-  for (const v of gray) hist[clamp(Math.round(v), 0, 255)]++;
-  let sum = 0;
-  for (let i = 0; i < 256; i++) sum += i * hist[i];
-  let wB = 0, sumB = 0, best = 0, thr = 128;
-  for (let t = 0; t < 256; t++) {
-    wB += hist[t];
-    if (!wB) continue;
-    const wF = w * h - wB;
-    if (!wF) break;
-    sumB += t * hist[t];
-    const between = wB * wF * (sumB / wB - (sum - sumB) / wF) ** 2;
-    if (between > best) {
-      best = between;
-      thr = t;
-    }
-  }
+  const thr = otsu(gray, w * h);
+
+  // Third look: how far each pixel is from the table around the edge of the photo (a tilted plane per colour
+  // channel), which still works when the page and the table are both light, or uneven light crosses the frame.
+  const away = backdropGap(data, w, h);
+  const awayThr = otsu(away, w * h);
 
   let pick = null;
-  for (const bright of [true, false]) {
-    const comp = largestComponent(gray, w, h, thr, bright);
+  for (const [map, t, bright] of [[gray, thr, true], [gray, thr, false], [away, awayThr, true]]) {
+    const comp = largestComponent(map, w, h, t, bright);
     if (!comp) continue;
     const share = comp.area / (w * h);
     if (share < 0.18 || share > 0.96) continue;
@@ -50,11 +38,98 @@ export function detectCorners(source) {
     const qa = quadArea(quad);
     const fill = comp.area / Math.max(qa, 1);
     if (fill < 0.72 || qa / (w * h) < 0.2) continue;
-    const score = fill * Math.min(share / 0.5, 1);
+    const score = fill * Math.min(share / 0.5, 1) * (0.15 + edgeSupport(away, w, h, quad));
     if (!pick || score > pick.score) pick = { score, quad };
   }
   if (pick) return pick.quad.map(([x, y]) => [x / w, y / h]);
   return [[0.05, 0.05], [0.95, 0.05], [0.95, 0.95], [0.05, 0.95]]; // nothing clear: the whole frame
+}
+
+// How strongly the backdrop-gap map changes across the sides of a candidate quad (a real page edge is sharp).
+function edgeSupport(map, w, h, q) {
+  let hi = 1e-6;
+  for (let i = 0; i < w * h; i++) if (map[i] > hi) hi = map[i];
+  const at = (x, y) => map[clamp(Math.round(y), 0, h - 1) * w + clamp(Math.round(x), 0, w - 1)];
+  let total = 0;
+  for (let k = 0; k < 4; k++) {
+    const [x1, y1] = q[k], [x2, y2] = q[(k + 1) % 4];
+    const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1, nx = -dy / len * 3, ny = dx / len * 3;
+    let good = 0;
+    for (let i = 1; i < 32; i++) {
+      const px = x1 + dx * i / 32, py = y1 + dy * i / 32;
+      if (Math.abs(at(px + nx, py + ny) - at(px - nx, py - ny)) / hi > 0.12) good++;
+    }
+    total += good / 31;
+  }
+  return total / 4;
+}
+
+function otsu(v, n) {
+  let lo = Infinity, hi = -Infinity;
+  for (let i = 0; i < n; i++) { if (v[i] < lo) lo = v[i]; if (v[i] > hi) hi = v[i]; }
+  const span = Math.max(hi - lo, 1e-6), hist = new Float64Array(256);
+  for (let i = 0; i < n; i++) hist[Math.min(255, ((v[i] - lo) / span * 255) | 0)]++;
+  let sum = 0;
+  for (let i = 0; i < 256; i++) sum += i * hist[i];
+  let wB = 0, sumB = 0, best = 0, t0 = 128;
+  for (let t = 0; t < 256; t++) {
+    wB += hist[t];
+    if (!wB) continue;
+    const wF = n - wB;
+    if (!wF) break;
+    sumB += t * hist[t];
+    const between = wB * wF * (sumB / wB - (sum - sumB) / wF) ** 2;
+    if (between > best) { best = between; t0 = t; }
+  }
+  return lo + (t0 + 0.5) / 255 * span;
+}
+
+// Distance of every pixel from a colour plane fitted to the outer ring of the photo.
+function backdropGap(data, w, h) {
+  const ring = Math.max(2, Math.round(Math.min(w, h) * 0.05));
+  const out = new Float32Array(w * h);
+  const planes = [];
+  for (let c = 0; c < 3; c++) {
+    // least squares v = a + b*x + c*y over ring pixels
+    const m = [0, 0, 0, 0, 0, 0, 0, 0, 0], r = [0, 0, 0];
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      if (x >= ring && x < w - ring && y >= ring && y < h - ring) { x = w - ring - 1; continue; }
+      const nx = x / w, ny = y / h, v = data[(y * w + x) * 4 + c];
+      m[0] += 1; m[1] += nx; m[2] += ny; m[4] += nx * nx; m[5] += nx * ny; m[8] += ny * ny;
+      r[0] += v; r[1] += v * nx; r[2] += v * ny;
+    }
+    m[3] = m[1]; m[6] = m[2]; m[7] = m[5];
+    planes.push(solve3(m, r));
+  }
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    let d = 0;
+    for (let c = 0; c < 3; c++) {
+      const p = planes[c], e = data[(y * w + x) * 4 + c] - (p[0] + p[1] * x / w + p[2] * y / h);
+      d += e * e;
+    }
+    out[y * w + x] = Math.sqrt(d);
+  }
+  return boxBlur(boxBlur(out, w, h, 2), w, h, 2);
+}
+function solve3(m, r) {
+  const a = [[m[0], m[1], m[2], r[0]], [m[3], m[4], m[5], r[1]], [m[6], m[7], m[8], r[2]]];
+  for (let i = 0; i < 3; i++) {
+    let p = i;
+    for (let j = i + 1; j < 3; j++) if (Math.abs(a[j][i]) > Math.abs(a[p][i])) p = j;
+    [a[i], a[p]] = [a[p], a[i]];
+    if (Math.abs(a[i][i]) < 1e-9) return [r[0] / Math.max(m[0], 1), 0, 0];
+    for (let j = i + 1; j < 3; j++) {
+      const f = a[j][i] / a[i][i];
+      for (let k = i; k < 4; k++) a[j][k] -= f * a[i][k];
+    }
+  }
+  const x = [0, 0, 0];
+  for (let i = 2; i >= 0; i--) {
+    let v = a[i][3];
+    for (let k = i + 1; k < 3; k++) v -= a[i][k] * x[k];
+    x[i] = v / a[i][i];
+  }
+  return x;
 }
 
 function boxBlur(src, w, h, r) {

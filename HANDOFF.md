@@ -59,3 +59,8 @@ Settings menu (`#setBtn`, `#menu`: Vibration `reader.haptics`, Dark mode). Pill:
 - `#scanChip` and `SCAN_READY` (false) in `app.js` are the slot for the 1.5 scanner chip beside Archive. Sah wants Scan first in the empty state, and Scan beside Archive once files exist. Not shipped yet.
 
 - 1.4.5.7: one-time swipe hint (`maybeNudge`, localStorage `reader.swipeHint`), `showHome` no longer resets the view (the Archive survives closing a document), swipe disabled while `state.view === "archive"`, `resetThemeMorph()` runs on every `refreshHome`, and `refreshHome` fades the shelf out before the list empties (`state.homeWasEmpty`) so the logo and greeting arrive smoothly.
+
+## 1.8 scanner/OCR improvements
+- `detectCorners` now has a third candidate map (`backdropGap`: colour distance from a plane fitted to the photo border) and scores candidates with `edgeSupport`. Synthetic benchmark (8 scenes): mean corner error 0.196 -> 0.023.
+- `ocr.js`: English worker first; reruns with eng+ben when confidence < 72; enlarges small pages (up to 2x) before recognition. Blurry test page: 87.5% -> 93.6% words.
+- Release build shrinks with R8 (patch-android step 7).
