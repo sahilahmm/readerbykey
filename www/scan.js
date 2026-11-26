@@ -442,7 +442,11 @@ export function enhance(canvas, mode) {
     } else {
       let v = ((d[p] * 0.299 + d[p + 1] * 0.587 + d[p + 2] * 0.114) / paper) * 255;
       if (mode === "bw") v = v < 190 ? 0 : 255;
-      else v = clamp((v - 110) * (255 / 120), 0, 255); // white paper, firm dark text
+      else {
+        // white paper, firm dark text; the faint mirror-image print that shows through from the back sits above the white point and vanishes
+        const t = clamp((v - 105) / 80, 0, 1);
+        v = t * t * (3 - 2 * t) * 255;
+      }
       d[p] = d[p + 1] = d[p + 2] = v;
     }
   }

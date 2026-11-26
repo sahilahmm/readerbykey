@@ -16,5 +16,7 @@ for (const name of names) {
   out += `${"=".repeat(70)}\n${p.name} ${p.version} (${p.license})\n${p.homepage || ""}\n${"=".repeat(70)}\n`;
   out += file ? readFileSync(join(dir, file), "utf8").trim() + "\n\n" : "(see the package's repository for the licence text)\n\n";
 }
+// the page-finder model is a file, not an npm package
+out += `${"=".repeat(70)}\nDocQuadNet page-finder model (Apache-2.0)\n${"=".repeat(70)}\n` + readFileSync(join(root, "vendor", "docquad", "NOTICE.txt"), "utf8") + "\n" + readFileSync(join(root, "vendor", "docquad", "LICENSE-Apache-2.0.txt"), "utf8").trim() + "\n";
 writeFileSync(join(root, "www", "licenses.txt"), out);
 console.log(`www/licenses.txt written (${names.length} packages)`);

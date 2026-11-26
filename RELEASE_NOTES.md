@@ -1,4 +1,4 @@
-## 1.9
-- Scanner finds the page with a small on-device neural network (works offline; no photo leaves the phone). Much better on busy cloth, white-on-white pages and tilted pages.
-- If it still isn't sure, the corner editor opens so you can confirm the corners.
-- The app is larger (about 25 MB) because of the page-finder model.
+## 1.9.1
+- App is about 6 MB smaller (page-finder model stored more compactly, same accuracy).
+- "Enhance" filter removes the faint print that shows through from the back of a page, so text is cleaner.
+- Model credit added to the licence list.

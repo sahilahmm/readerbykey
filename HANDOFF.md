@@ -72,3 +72,9 @@ Settings menu (`#setBtn`, `#menu`: Vibration `reader.haptics`, Dark mode). Pill:
 ## 1.9 neural page finder
 - `www/dq.js` `findPage(src)`: DocQuadNet (Apache-2.0, from egdels/makeacopy, `vendor/docquad/`) via onnxruntime-web 1.22.0 (wasm, 1 thread). 256px letterbox, RGB/255 NCHW, outputs corner_heatmaps 4x64x64 (argmax) . Tries rotations 0,±25,±45 until confidence >= 0.6. Falls back to `detectCorners`/`lineQuad` in scan.js; `.sure=false` opens the corner editor.
 - Files copied by prepare-web.mjs to www/lib/dq (renamed .js/.wasm/.ort so every WebView serves them with a valid type). Not yet verified on a real phone: wasm loading inside Capacitor WebView.
+
+## 1.9.1
+- docquad weights rounded to bfloat16 inside the .ort flatbuffer (script: round `RawDataAsNumpy` float tensors with `u=(u+0x7FFF+((u>>16)&1))&0xFFFF0000`), deflates to ~6 MB; benchmark unchanged.
+- `enhance` "doc" mode uses smoothstep(105..185) so show-through (>~185 after background division) turns white.
+- Size breakdown (1.9 APK, compressed): docquad 12.4 MB, ort.wasm 2.9, eng.traineddata 2.9, tesseract cores 2x1.5, ben 1.4. Bangla is NOT the big item.
+- OCR: ~2.4-3.8 s/page on desktop; prose accurate, formulas not. Ideas: parallel workers on line-gap bands; PaddleOCR v5 (no Bangla).
