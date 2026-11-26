@@ -135,7 +135,7 @@ jobs:
         with:
           subject-path: dist/${{ env.APK_NAME }}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: Reader-by-Key-apk
           path: dist/
