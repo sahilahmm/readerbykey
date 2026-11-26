@@ -1,5 +1,6 @@
 // The scanner, built into the bottom pill: tap Scan, the phone's own camera takes the photo, Reader straightens and cleans it.
-import { detectCorners, warp, enhance, toJpeg, makePdf } from "./scan.js";
+import { findPage } from "./dq.js";
+import { warp, enhance, toJpeg, makePdf } from "./scan.js";
 
 const LONG = 450; // ms held still on a thumbnail to adjust its corners
 
@@ -155,7 +156,7 @@ export function createScanner({ openBlob, toast, buzz, loadExport, store, setMod
       src.getContext("2d").drawImage(bmp, 0, 0, src.width, src.height);
       bmp.close && bmp.close();
       await frame();
-      const p = { src: await blobOf(src), corners: detectCorners(src), canvas: null, url: "" }; // the photo is kept as a small JPEG so a page can be adjusted later
+      const p = { src: await blobOf(src), corners: await findPage(src), canvas: null, url: "" }; // the photo is kept as a small JPEG so a page can be adjusted later
       await render(p);
       pages.push(p);
       buzz("ok");

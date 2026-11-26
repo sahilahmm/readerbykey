@@ -21,6 +21,7 @@
     "@capacitor/share": "^8.0.3",
     "@tesseract.js-data/ben": "^1.0.0",
     "@tesseract.js-data/eng": "^1.0.0",
+    "onnxruntime-web": "1.22.0",
     "pdfjs-dist": "^5.4.0",
     "tesseract.js": "^7.0.0",
     "tesseract.js-core": "^7.0.0"

@@ -68,3 +68,7 @@ Settings menu (`#setBtn`, `#menu`: Vibration `reader.haptics`, Dark mode). Pill:
 ## 1.8.1
 - `lineQuad` (Hough lines -> best page-shaped quad) is a fallback in `detectCorners`; result array carries `.sure`. `scan-ui.js` opens `openEdit` when `!sure`.
 - Known limit: busy patterned backgrounds still defeat classical detection. Real fix = small neural corner model (candidates: DocAligner 2.3MB, MakeACopy DocQuadNet Apache-2.0) + onnxruntime-web; check weight licences and app-size cost first.
+
+## 1.9 neural page finder
+- `www/dq.js` `findPage(src)`: DocQuadNet (Apache-2.0, from egdels/makeacopy, `vendor/docquad/`) via onnxruntime-web 1.22.0 (wasm, 1 thread). 256px letterbox, RGB/255 NCHW, outputs corner_heatmaps 4x64x64 (argmax) . Tries rotations 0,±25,±45 until confidence >= 0.6. Falls back to `detectCorners`/`lineQuad` in scan.js; `.sure=false` opens the corner editor.
+- Files copied by prepare-web.mjs to www/lib/dq (renamed .js/.wasm/.ort so every WebView serves them with a valid type). Not yet verified on a real phone: wasm loading inside Capacitor WebView.

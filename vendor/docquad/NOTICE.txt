@@ -1,0 +1,3 @@
+docquadnet256.ort — DocQuadNet document corner detector (ONNX/ORT format).
+Copyright MakeACopy authors (https://github.com/egdels/makeacopy), licensed under the Apache License 2.0
+(see LICENSE-Apache-2.0.txt). Used unmodified. Runs offline through ONNX Runtime Web (MIT).

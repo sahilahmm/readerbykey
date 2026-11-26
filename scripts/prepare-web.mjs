@@ -43,7 +43,19 @@ for (const dir of ["standard_fonts", "iccs", "wasm"]) {
   for (const l of ["eng", "ben"]) writeFileSync(join(ocr, "lang", `${l}.traineddata`), gunzipSync(readFileSync(join(nm, "@tesseract.js-data", l, "4.0.0_best_int", `${l}.traineddata.gz`))));
 }
 
-console.log("PDF.js and OCR files copied to www/lib");
+// Page finder for the scanner: a small neural network that locates the four corners of a page, run offline by ONNX Runtime Web.
+// File names end in .js / .wasm / .ort on purpose: every WebView serves those with the right type.
+{
+  const nm = join(root, "node_modules", "onnxruntime-web", "dist");
+  const dq = join(out, "dq");
+  mkdirSync(dq, { recursive: true });
+  cpSync(join(nm, "ort.wasm.min.mjs"), join(dq, "ort.js"));
+  cpSync(join(nm, "ort-wasm-simd-threaded.mjs"), join(dq, "glue.js"));
+  cpSync(join(nm, "ort-wasm-simd-threaded.wasm"), join(dq, "ort.wasm"));
+  cpSync(join(root, "vendor", "docquad", "docquadnet256.ort"), join(dq, "docquad.ort"));
+}
+
+console.log("PDF.js, OCR and page-finder files copied to www/lib");
 
 // In CI the app's own scripts and styles are minified (about half the size). Local runs leave them readable.
 if (process.env.CI) {
