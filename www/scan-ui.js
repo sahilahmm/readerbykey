@@ -159,6 +159,12 @@ export function createScanner({ openBlob, toast, buzz, loadExport, store, setMod
       await render(p);
       pages.push(p);
       buzz("ok");
+      if (!p.corners.sure) {
+        paint();
+        toast("Check the corners");
+        busy = false;
+        return openEdit(p); // the page edge wasn't clear: let the person confirm it
+      }
     } catch {
       toast("That photo couldn't be read");
     }

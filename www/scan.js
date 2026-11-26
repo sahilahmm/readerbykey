@@ -39,10 +39,18 @@ export function detectCorners(source) {
     const fill = comp.area / Math.max(qa, 1);
     if (fill < 0.72 || qa / (w * h) < 0.2) continue;
     const score = fill * Math.min(share / 0.5, 1) * (0.15 + edgeSupport(away, w, h, quad));
-    if (!pick || score > pick.score) pick = { score, quad };
+    if (!pick || score > pick.score) pick = { score, quad, sup: edgeSupport(away, w, h, quad) };
   }
-  if (pick) return pick.quad.map(([x, y]) => [x / w, y / h]);
-  return [[0.05, 0.05], [0.95, 0.05], [0.95, 0.95], [0.05, 0.95]]; // nothing clear: the whole frame
+  // Busy or same-coloured backgrounds (patterned cloth, white page on a white table): look for the four straight
+  // page edges instead of a flat blob.
+  if (!pick || pick.sup < 0.6) {
+    const line = lineQuad(gray, w, h);
+    if (line && (!pick || line.score > pick.sup + 0.1)) pick = { quad: line.quad, sup: line.score };
+  }
+  // `sure` tells the screen whether to let the person confirm the corners first
+  const out = pick ? pick.quad.map(([x, y]) => [x / w, y / h]) : [[0.05, 0.05], [0.95, 0.05], [0.95, 0.95], [0.05, 0.95]];
+  out.sure = !!pick && pick.sup >= 0.5;
+  return out;
 }
 
 // How strongly the backdrop-gap map changes across the sides of a candidate quad (a real page edge is sharp).
@@ -62,6 +70,105 @@ function edgeSupport(map, w, h, q) {
     total += good / 31;
   }
   return total / 4;
+}
+
+// Hough lines over strong edges, then the best four lines that make a page-shaped quad.
+function lineQuad(gray, w, h) {
+  const gx = new Float32Array(w * h), gy = new Float32Array(w * h), mag = new Float32Array(w * h);
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+    const i = y * w + x;
+    const a = (gray[i + 1] - gray[i - 1]) * 2 + gray[i - w + 1] - gray[i - w - 1] + gray[i + w + 1] - gray[i + w - 1];
+    const b = (gray[i + w] - gray[i - w]) * 2 + gray[i + w - 1] - gray[i - w - 1] + gray[i + w + 1] - gray[i - w + 1];
+    gx[i] = a; gy[i] = b; mag[i] = Math.hypot(a, b);
+  }
+  const sorted = Float32Array.from(mag).sort();
+  const cut = Math.max(sorted[Math.floor(sorted.length * 0.9)], 8);
+  const D = Math.ceil(Math.hypot(w, h)), NT = 180, acc = new Float32Array(NT * (2 * D + 1));
+  const cs = [], sn = [];
+  for (let t = 0; t < NT; t++) { cs.push(Math.cos(t * Math.PI / NT)); sn.push(Math.sin(t * Math.PI / NT)); }
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+    const i = y * w + x;
+    if (mag[i] < cut) continue;
+    let th = Math.atan2(gy[i], gx[i]); // normal of the edge
+    const t0 = Math.round(((th % Math.PI) + Math.PI) % Math.PI / Math.PI * NT);
+    for (let dt = -2; dt <= 2; dt++) {
+      const t = (t0 + dt + NT) % NT;
+      acc[t * (2 * D + 1) + Math.round(x * cs[t] + y * sn[t]) + D] += mag[i];
+    }
+  }
+  // strongest separated peaks
+  const peaks = [];
+  const used = new Uint8Array(acc.length);
+  const order = Array.from(acc.keys()).filter((k) => acc[k] > 0).sort((p, q) => acc[q] - acc[p]);
+  for (const k of order) {
+    if (peaks.length >= 30) break;
+    const t = (k / (2 * D + 1)) | 0, r = (k % (2 * D + 1)) - D;
+    let skip = false;
+    for (const p of peaks) {
+      let dt = Math.abs(p.t - t); dt = Math.min(dt, NT - dt);
+      if (dt <= 8 && Math.abs(p.r - r) <= 8) { skip = true; break; }
+    }
+    if (!skip) peaks.push({ t, r, v: acc[k] });
+  }
+  const ang = (a, b) => { let d = Math.abs(a.t - b.t); d = Math.min(d, NT - d); return d; };
+  const pairs = [];
+  for (let i = 0; i < peaks.length; i++) for (let j = i + 1; j < peaks.length; j++) {
+    if (ang(peaks[i], peaks[j]) <= 22 && Math.abs(peaks[i].r * Math.sign(cs[peaks[i].t] || 1) - peaks[j].r) >= 0) pairs.push([peaks[i], peaks[j]]);
+  }
+  const meet = (p, q) => {
+    const det = cs[p.t] * sn[q.t] - sn[p.t] * cs[q.t];
+    if (Math.abs(det) < 0.2) return null;
+    return [(p.r * sn[q.t] - q.r * sn[p.t]) / det, (cs[p.t] * q.r - cs[q.t] * p.r) / det];
+  };
+  const m = 0.08;
+  let best = null;
+  for (let a = 0; a < pairs.length; a++) for (let b = a + 1; b < pairs.length; b++) {
+    const A = pairs[a], B = pairs[b];
+    if (A.includes(B[0]) || A.includes(B[1])) continue;
+    const da = ang(A[0], B[0]);
+    if (da < 50) continue;
+    const pts = [meet(A[0], B[0]), meet(A[0], B[1]), meet(A[1], B[1]), meet(A[1], B[0])];
+    if (pts.some((p) => !p || p[0] < -m * w || p[0] > w * (1 + m) || p[1] < -m * h || p[1] > h * (1 + m))) continue;
+    // order around the quad: top-left first
+    const cx = pts.reduce((s2, p) => s2 + p[0], 0) / 4, cy = pts.reduce((s2, p) => s2 + p[1], 0) / 4;
+    pts.sort((p, q) => Math.atan2(p[1] - cy, p[0] - cx) - Math.atan2(q[1] - cy, q[0] - cx));
+    let k0 = 0;
+    for (let k = 1; k < 4; k++) if (pts[k][0] + pts[k][1] < pts[k0][0] + pts[k0][1]) k0 = k;
+    const quad = [0, 1, 2, 3].map((k) => pts[(k0 + k) % 4].map((v, ax) => clamp(v, 0, ax ? h - 1 : w - 1)));
+    const area = quadArea(quad) / (w * h);
+    if (area < 0.2 || area > 0.97) continue;
+    // all four corners must be proper turns (convex)
+    let convex = true;
+    for (let k = 0; k < 4; k++) {
+      const p0 = quad[k], p1 = quad[(k + 1) % 4], p2 = quad[(k + 2) % 4];
+      if ((p1[0] - p0[0]) * (p2[1] - p1[1]) - (p1[1] - p0[1]) * (p2[0] - p1[0]) <= 0) convex = false;
+    }
+    if (!convex) continue;
+    const sides = [];
+    for (let k = 0; k < 4; k++) sides.push(sideSupport(mag, gx, gy, w, h, quad[k], quad[(k + 1) % 4], cut));
+    const sc = 0.5 * (sides.reduce((s2, v) => s2 + v, 0) / 4) + 0.5 * Math.min(...sides);
+    if (!best || sc > best.score) best = { score: sc, quad };
+  }
+  return best && best.score > 0.25 ? best : null;
+}
+// fraction of points along a side that sit on a strong edge running along that side
+function sideSupport(mag, gx, gy, w, h, p, q, cut) {
+  const dx = q[0] - p[0], dy = q[1] - p[1], len = Math.hypot(dx, dy) || 1, nx = -dy / len, ny = dx / len;
+  let good = 0, n = 0;
+  for (let i = 1; i < 40; i++) {
+    const px = p[0] + dx * i / 40, py = p[1] + dy * i / 40;
+    let ok = false;
+    for (let oy = -2; oy <= 2 && !ok; oy++) for (let ox = -2; ox <= 2 && !ok; ox++) {
+      const x = Math.round(px) + ox, y = Math.round(py) + oy;
+      if (x < 1 || y < 1 || x >= w - 1 || y >= h - 1) continue;
+      const j = y * w + x;
+      if (mag[j] >= cut && Math.abs(gx[j] * nx + gy[j] * ny) / mag[j] > 0.85) ok = true;
+    }
+    if (px < 3 || py < 3 || px > w - 4 || py > h - 4) continue; // sides along the photo border carry no evidence
+    n++;
+    if (ok) good++;
+  }
+  return n < 8 ? 0.5 : good / n;
 }
 
 function otsu(v, n) {

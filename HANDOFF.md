@@ -64,3 +64,7 @@ Settings menu (`#setBtn`, `#menu`: Vibration `reader.haptics`, Dark mode). Pill:
 - `detectCorners` now has a third candidate map (`backdropGap`: colour distance from a plane fitted to the photo border) and scores candidates with `edgeSupport`. Synthetic benchmark (8 scenes): mean corner error 0.196 -> 0.023.
 - `ocr.js`: English worker first; reruns with eng+ben when confidence < 72; enlarges small pages (up to 2x) before recognition. Blurry test page: 87.5% -> 93.6% words.
 - Release build shrinks with R8 (patch-android step 7).
+
+## 1.8.1
+- `lineQuad` (Hough lines -> best page-shaped quad) is a fallback in `detectCorners`; result array carries `.sure`. `scan-ui.js` opens `openEdit` when `!sure`.
+- Known limit: busy patterned backgrounds still defeat classical detection. Real fix = small neural corner model (candidates: DocAligner 2.3MB, MakeACopy DocQuadNet Apache-2.0) + onnxruntime-web; check weight licences and app-size cost first.
