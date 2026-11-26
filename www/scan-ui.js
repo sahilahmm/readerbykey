@@ -16,6 +16,7 @@ export function createScanner({ openBlob, toast, buzz, loadExport, store, setMod
   let pages = []; // { canvas, url }
   let active = false;
   let busy = false;
+  let queue = Promise.resolve(); // photos are looked at one after another, in the background
 
   const look = () => store("reader.scanLook") || "doc";
 
@@ -26,6 +27,7 @@ export function createScanner({ openBlob, toast, buzz, loadExport, store, setMod
       t.className = p.unsure ? "t warn" : "t";
       const img = document.createElement("img");
       img.src = p.url;
+      p.img = img;
       img.alt = `Page ${pages.indexOf(p) + 1}`;
       img.draggable = false;
       const x = document.createElement("button");
@@ -36,6 +38,7 @@ export function createScanner({ openBlob, toast, buzz, loadExport, store, setMod
         URL.revokeObjectURL(p.url);
         pages.splice(pages.indexOf(p), 1);
         buzz("warn");
+        draft();
         if (pages.length) paint();
         else end();
       });
@@ -100,6 +103,7 @@ export function createScanner({ openBlob, toast, buzz, loadExport, store, setMod
       if (dragging) {
         const order = [...strip.querySelectorAll(".t")].map((n) => n.__p);
         pages = order.filter(Boolean);
+        draft();
         t.classList.remove("lift");
         paint();
       }
@@ -119,13 +123,14 @@ export function createScanner({ openBlob, toast, buzz, loadExport, store, setMod
     active = false;
     busy = false;
     strip.replaceChildren();
+    draft();
     setMode(defaultMode());
   }
 
   const blobOf = (canvas, q = 0.9) => new Promise((r) => canvas.toBlob(r, "image/jpeg", q));
   // a small picture of the page for the strip; the full-size work waits until Save
-  async function render(p) {
-    const src = await decode(p.src);
+  async function render(p, known) {
+    const src = known || (await decode(p.src));
     let th;
     if (p.corners) th = enhance(warp(src, p.corners, 360), look());
     else {
@@ -145,36 +150,16 @@ export function createScanner({ openBlob, toast, buzz, loadExport, store, setMod
     o.sure = q.sure;
     return o;
   };
-  // the progress ring around the pill
+  // progress is a lighter fill that grows across the pill itself
   const dock = $("dock");
-  let ringEl = null;
-  function layoutRing() {
-    if (!ringEl) return;
-    const w = dock.offsetWidth + 12, h = dock.offsetHeight + 12;
-    ringEl.setAttribute("viewBox", `0 0 ${w} ${h}`);
-    for (const r of ringEl.children) {
-      r.setAttribute("x", 2);
-      r.setAttribute("y", 2);
-      r.setAttribute("width", w - 4);
-      r.setAttribute("height", h - 4);
-      r.setAttribute("rx", (h - 4) / 2);
-    }
-  }
-  if (typeof ResizeObserver !== "undefined") new ResizeObserver(layoutRing).observe(dock); // the pill changes size as it morphs
   function ring(f) {
     if (f == null) {
       dock.classList.remove("busy");
+      dock.style.removeProperty("--p");
       return;
     }
-    if (!ringEl) {
-      ringEl = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      ringEl.setAttribute("class", "ring");
-      ringEl.innerHTML = '<rect class="track" pathLength="100"/><rect class="bar" pathLength="100"/>';
-      dock.append(ringEl);
-    }
-    layoutRing();
-    ringEl.lastChild.setAttribute("stroke-dasharray", `${Math.max(0.5, Math.min(1, f)) * 100} 100`);
     dock.classList.add("busy");
+    dock.style.setProperty("--p", String(Math.round(Math.max(0.02, Math.min(1, f)) * 1000) / 10));
   }
   async function decode(blob) {
     const bmp = await createImageBitmap(blob);
@@ -184,6 +169,32 @@ export function createScanner({ openBlob, toast, buzz, loadExport, store, setMod
     c.getContext("2d").drawImage(bmp, 0, 0);
     bmp.close && bmp.close();
     return c;
+  }
+
+  // find the page edges in the background, one photo at a time, then swap the small picture in place
+  function locate(p, src) {
+    p.ready = queue = queue.then(async () => {
+      let sure = true;
+      await frame();
+      try {
+        const c = await findPage(src || (await decode(p.src)));
+        sure = c.sure;
+        p.corners = tighten(c);
+      } catch {
+        p.corners = [[0.04, 0.04], [0.96, 0.04], [0.96, 0.96], [0.04, 0.96]];
+        sure = false;
+      }
+      p.unsure = !sure;
+      await render(p);
+      if (pages.includes(p)) {
+        if (p.img) {
+          p.img.src = p.url; // swap the picture in place: the strip is not rebuilt under a finger
+          p.img.parentNode.classList.toggle("warn", p.unsure);
+        }
+        if (!sure && !editing && !busy) toast("Hold the page to check its corners");
+      }
+      draft();
+    });
   }
 
   // a new photo is kept at once; finding the page and everything else happens later, out of the way
@@ -198,26 +209,11 @@ export function createScanner({ openBlob, toast, buzz, loadExport, store, setMod
       src.getContext("2d").drawImage(bmp, 0, 0, src.width, src.height);
       bmp.close && bmp.close();
       const p = { src: await blobOf(src), corners: null, url: "", ready: null }; // the photo is kept as a small JPEG so a page can be adjusted later
-      await render(p);
+      await render(p, src);
       pages.push(p);
       buzz("ok");
-      p.ready = (async () => {
-        let sure = true;
-        try {
-          const c = await findPage(src);
-          sure = c.sure;
-          p.corners = tighten(c);
-        } catch {
-          p.corners = [[0.04, 0.04], [0.96, 0.04], [0.96, 0.96], [0.04, 0.96]];
-          sure = false;
-        }
-        p.unsure = !sure;
-        await render(p);
-        if (pages.includes(p)) {
-          paint();
-          if (!sure && !editing && !busy) toast("Hold the page to check its corners");
-        }
-      })();
+      locate(p, null);
+      draft();
     } catch {
       toast("That photo couldn't be read");
     }
@@ -307,6 +303,7 @@ export function createScanner({ openBlob, toast, buzz, loadExport, store, setMod
     p.corners = corners;
     p.unsure = false;
     await render(p);
+    draft();
     busy = false;
     buzz("ok");
     paint();
@@ -366,7 +363,12 @@ export function createScanner({ openBlob, toast, buzz, loadExport, store, setMod
       let blob, filename;
       if (kind === "word") {
         const x = await loadExport();
-        blob = texts ? x.buildDocx(texts.map((t) => (t.paragraphs.length ? t.paragraphs : [""])), name) : x.buildImageDocx(imgs, name);
+        blob = texts
+          ? x.buildDocx(
+              texts.map((t) => (t.blocks && t.blocks.length ? t.blocks.map((b) => (b.kind === "p" ? { runs: b.runs } : { h: b.kind === "h1" ? 1 : 2, t: b.text })) : [""])),
+              name
+            )
+          : x.buildImageDocx(imgs, name);
         filename = `${name}.docx`;
       } else {
         blob = makePdf(imgs, name);
@@ -424,6 +426,63 @@ export function createScanner({ openBlob, toast, buzz, loadExport, store, setMod
   });
   $("sPdf").addEventListener("click", () => save("pdf"));
   $("sWord").addEventListener("click", () => save("word"));
+
+  /* ----- keep the work safe: if the phone closes the app while the camera is open, the pages come back ----- */
+  const DB = () =>
+    new Promise((res, rej) => {
+      const q = indexedDB.open("reader-scan", 1);
+      q.onupgradeneeded = () => q.result.createObjectStore("d");
+      q.onsuccess = () => res(q.result);
+      q.onerror = () => rej(q.error);
+    });
+  let saving = Promise.resolve();
+  function draft() {
+    saving = saving.then(async () => {
+      try {
+        const db = await DB();
+        const tx = db.transaction("d", "readwrite");
+        const st = tx.objectStore("d");
+        if (pages.length) st.put({ pages: pages.map((p) => ({ src: p.src, corners: p.corners ? p.corners.map((c) => [...c]) : null, unsure: !!p.unsure })) }, "draft");
+        else st.delete("draft");
+        await new Promise((r) => (tx.oncomplete = tx.onerror = tx.onabort = r));
+        db.close();
+      } catch {
+        /* storage unavailable: the scan simply isn't kept across a restart */
+      }
+    });
+  }
+  async function restore() {
+    try {
+      const db = await DB();
+      const d = await new Promise((r) => {
+        const q = db.transaction("d").objectStore("d").get("draft");
+        q.onsuccess = () => r(q.result);
+        q.onerror = () => r(null);
+      });
+      db.close();
+      if (!d || !d.pages || !d.pages.length || pages.length || busy) return;
+      for (const x of d.pages) {
+        const p = { src: x.src, corners: x.corners, url: "", ready: Promise.resolve(), unsure: x.unsure };
+        await render(p);
+        if (!p.corners) locate(p, null);
+        pages.push(p);
+      }
+      paint();
+      toast("Your scan was restored");
+    } catch {
+      /* nothing to restore */
+    }
+  }
+  restore();
+  const capApp = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+  if (capApp && capApp.addListener)
+    capApp.addListener("appRestoredResult", async (r) => {
+      try {
+        if (r && r.pluginId === "Camera" && r.success && r.data && r.data.webPath) take(await (await fetch(r.data.webPath)).blob());
+      } catch {
+        /* the photo is gone: nothing to add */
+      }
+    });
 
   return {
     open: () => (pages.length ? paint() : shoot()),

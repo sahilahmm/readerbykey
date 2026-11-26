@@ -87,7 +87,7 @@ function toParagraphs(items) {
 const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
 const esc = (s) =>
   s
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, "")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\uE000-\uF8FF\uFFF9-\uFFFF]/g, "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
@@ -111,9 +111,11 @@ export function buildDocx(pages, title = "Document") {
   const body = pages
     .flat()
     .map((p) =>
-      typeof p === "object"
-        ? `<w:p><w:pPr><w:pStyle w:val="Heading${p.h === 1 ? 1 : 2}"/></w:pPr><w:r><w:t xml:space="preserve">${esc(p.t)}</w:t></w:r></w:p>`
-        : `<w:p><w:r><w:t xml:space="preserve">${esc(p)}</w:t></w:r></w:p>`
+      typeof p === "object" && p.runs
+        ? `<w:p>${p.runs.map((r) => `<w:r>${r.b ? "<w:rPr><w:b/><w:bCs/></w:rPr>" : ""}<w:t xml:space="preserve">${esc(r.t)}${" "}</w:t></w:r>`).join("")}</w:p>`
+        : typeof p === "object"
+          ? `<w:p><w:pPr><w:pStyle w:val="Heading${p.h === 1 ? 1 : 2}"/></w:pPr><w:r><w:t xml:space="preserve">${esc(p.t)}</w:t></w:r></w:p>`
+          : `<w:p><w:r><w:t xml:space="preserve">${esc(p)}</w:t></w:r></w:p>`
     )
     .join("");
   const now = new Date().toISOString().replace(/\.\d+Z$/, "Z");

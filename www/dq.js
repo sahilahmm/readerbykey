@@ -29,6 +29,17 @@ function order(p) {
   return [0, 1, 2, 3].map((i) => q[(k + i) % 4]);
 }
 
+// a page photographed from above has corners that are roughly square: reject shapes that are far from that
+function plausible(q) {
+  for (let i = 0; i < 4; i++) {
+    const a = q[(i + 3) % 4], b = q[i], c = q[(i + 1) % 4];
+    const v1 = [a[0] - b[0], a[1] - b[1]], v2 = [c[0] - b[0], c[1] - b[1]];
+    const cos = (v1[0] * v2[0] + v1[1] * v2[1]) / (Math.hypot(...v1) * Math.hypot(...v2) || 1);
+    const deg = (Math.acos(Math.max(-1, Math.min(1, cos))) * 180) / Math.PI;
+    if (deg < 55 || deg > 125) return false;
+  }
+  return true;
+}
 const area = (q) => Math.abs(q.reduce((s, p, i) => s + p[0] * q[(i + 1) % 4][1] - q[(i + 1) % 4][0] * p[1], 0)) / 2;
 function convex(q) {
   for (let i = 0; i < 4; i++) {
@@ -77,6 +88,7 @@ async function neural(src) {
   const m = await load();
   let best = null;
   for (const deg of [0, 25, -25, 45, -45]) {
+    if (deg) await new Promise((r) => setTimeout(r, 16)); // let the screen breathe between tries
     const r = await pass(m, src, deg);
     if (!best || r.conf > best.conf) best = r;
     if (best.conf >= 0.6) break; // tilted pages get extra tries, upright ones stop at once
@@ -93,7 +105,7 @@ export async function findPage(src) {
   try {
     nn = await neural(src);
     const a = area(nn.quad);
-    if (!(a > 0.12 && a < 1.02 && convex(nn.quad))) nn = null;
+    if (!(a > 0.12 && a < 1.02 && convex(nn.quad) && plausible(nn.quad))) nn = null;
   } catch {
     nn = null; // model not available: image methods only
   }

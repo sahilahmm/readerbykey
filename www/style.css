@@ -643,10 +643,8 @@ button { font: inherit; color: inherit; }
 .seg[data-s="socr"].on { flex-grow: 0.7; }
 #sOcr[aria-checked="false"] { opacity: 0.5; text-decoration: line-through; }
 
-/* progress ring around the pill while a scan is processed */
-.dock .ring { position: absolute; left: -6px; top: -6px; width: calc(100% + 12px); height: calc(100% + 12px); overflow: visible; pointer-events: none; opacity: 0; transition: opacity 0.2s; }
-.dock.busy .ring { opacity: 1; }
-.dock .ring rect { fill: none; stroke-width: 3; }
-.dock .ring .track { stroke: var(--accent); opacity: 0.16; }
-.dock .ring .bar { stroke: var(--accent); stroke-linecap: round; transition: stroke-dasharray 0.25s ease-out; }
+/* progress while a scan is processed: a lighter fill grows across the pill */
+@property --p { syntax: "<number>"; inherits: true; initial-value: 0; }
+.dock::before { content: ""; position: absolute; inset: 0; z-index: 3; border-radius: inherit; pointer-events: none; opacity: 0; transition: --p 0.35s ease-out, opacity 0.2s; background: linear-gradient(90deg, rgba(255, 255, 255, 0.28) calc(var(--p) * 1%), transparent calc(var(--p) * 1%)); }
+.dock.busy::before { opacity: 1; }
 .thumbs .t.warn::after { content: ""; position: absolute; right: 4px; bottom: 4px; width: 9px; height: 9px; border-radius: 50%; background: #e0a030; }

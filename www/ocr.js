@@ -90,31 +90,91 @@ function cuts(canvas, n) {
   return out;
 }
 
-// one band through one worker -> paragraphs, words, and how sure the reader was
+// characters the reader can't place come out as boxes or "object" marks; they are dropped, never shown as gaps
+const JUNK = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F\u200B-\u200F\u2028-\u202E\uE000-\uF8FF\uFFF9-\uFFFF]/g;
+const clean = (t) => (t || "").replace(JUNK, "").replace(/\s+/g, " ").trim();
+
+// how much of its box a word fills with ink: bold print fills more than regular print
+function inkOf(ctx, bb) {
+  const w = Math.round(bb.x1 - bb.x0), h = Math.round(bb.y1 - bb.y0);
+  if (w < 6 || h < 6) return null;
+  const d = ctx.getImageData(Math.round(bb.x0), Math.round(bb.y0), w, h).data;
+  let dark = 0;
+  for (let i = 0; i < d.length; i += 4) if (d[i] < 110) dark++;
+  return dark / (w * h);
+}
+
+// one band through one worker -> paragraphs of lines of words, and how sure the reader was
 async function run(w, canvas, top) {
   const { data } = await w.recognize(canvas, {}, { blocks: true });
-  const paragraphs = [];
-  const words = [];
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  const paras = [];
   let sum = 0, n = 0;
   for (const b of data.blocks || [])
     for (const para of b.paragraphs || []) {
       const lines = [];
       for (const ln of para.lines || []) {
-        const ws = (ln.words || []).filter((wd) => (wd.text || "").trim());
+        const ws = (ln.words || []).filter((wd) => clean(wd.text));
         for (const wd of ws) { sum += wd.confidence || 0; n++; }
         if (!ws.length) continue;
         const mean = ws.reduce((a, wd) => a + (wd.confidence || 0), 0) / ws.length;
-        const t = (ln.text || "").replace(/\s+/g, " ").trim();
+        const t = clean(ln.text);
         // noise from pictures, dust and page edges: low confidence and hardly any letters
         const letters = (t.match(/\p{L}|\p{N}/gu) || []).length;
         if (mean < 45 || letters < 2 || (letters < 4 && mean < 70)) continue;
-        lines.push(t);
-        for (const wd of ws)
-          if (wd.bbox && (wd.confidence || 0) >= 30) words.push({ t: wd.text.trim(), x0: wd.bbox.x0, y0: wd.bbox.y0 + top, x1: wd.bbox.x1, y1: wd.bbox.y1 + top });
+        const words = [];
+        for (const wd of ws) {
+          const tx = clean(wd.text);
+          if (!tx || !wd.bbox || (wd.confidence || 0) < 30) continue;
+          words.push({ t: tx, x0: wd.bbox.x0, y0: wd.bbox.y0 + top, x1: wd.bbox.x1, y1: wd.bbox.y1 + top, ink: tx.length >= 3 ? inkOf(ctx, wd.bbox) : null });
+        }
+        if (words.length) lines.push(words);
       }
-      if (lines.length) paragraphs.push(lines.join(" "));
+      if (lines.length) paras.push(lines);
     }
-  return { paragraphs, words, sum, n };
+  return { paras, sum, n };
+}
+
+const median = (a) => {
+  const s = a.filter((v) => v != null && isFinite(v)).sort((x, y) => x - y);
+  return s.length ? s[s.length >> 1] : 0;
+};
+
+// headings, sub-headings, paragraphs and bold words, from the size and weight of the print
+function structure(paras) {
+  const lineH = (l) => median(l.map((w) => w.y1 - w.y0));
+  const M = median(paras.flatMap((p) => p.map(lineH))) || 1;
+  const ink = median(paras.flatMap((p) => p.flat().map((w) => w.ink)));
+  // a whole line printed heavier than the rest is bold; otherwise only words that stand out clearly are
+  const boldLine = (l) => {
+    const s = l.filter((w) => w.ink != null);
+    return ink > 0 && s.length >= 2 && s.filter((w) => w.ink >= ink * 1.12).length / s.length >= 0.6;
+  };
+  const boldWord = (w) => ink > 0 && w.ink != null && w.t.length >= 4 && w.ink >= ink * 1.4;
+  const out = paras.map((lines) => {
+    const flags = lines.map((l) => ({ l, all: boldLine(l) }));
+    const words = lines.flat();
+    const r = median(lines.map(lineH)) / M;
+    const solid = flags.flatMap((f) => f.l.filter((w) => w.ink != null).map((w) => f.all || boldWord(w)));
+    const share = solid.length ? solid.filter(Boolean).length / solid.length : 0;
+    const text = words.map((w) => w.t).join(" ");
+    let kind = "p";
+    if (r >= 1.18 && text.length < 200) kind = "h";
+    else if (share >= 0.8 && text.length < 110 && lines.length <= 2 && !/[.,;।]$/.test(text)) kind = "h";
+    const runs = [];
+    for (const f of flags)
+      for (const w of f.l) {
+        const b = kind === "p" && (f.all || boldWord(w));
+        const last = runs[runs.length - 1];
+        if (last && last.b === b) last.t += " " + w.t;
+        else runs.push({ t: w.t, b });
+      }
+    return { kind, text, runs, r };
+  });
+  // the biggest print is the title level, the rest of the headings are sub-headings
+  const top = Math.max(0, ...out.filter((b) => b.kind === "h").map((b) => b.r));
+  for (const b of out) if (b.kind === "h") b.kind = top >= 1.45 && b.r >= top * 0.85 ? "h1" : "h2";
+  return out;
 }
 
 async function pass(langs, canvas, edges, onFrac) {
@@ -136,11 +196,11 @@ async function pass(langs, canvas, edges, onFrac) {
       }
     })
   );
-  const paragraphs = res.flatMap((r) => r.paragraphs);
-  const words = res.flatMap((r) => r.words);
+  const blocks = structure(res.flatMap((r) => r.paras));
+  const words = res.flatMap((r) => r.paras.flat(2));
   const n = res.reduce((a, r) => a + r.n, 0);
   const conf = n ? res.reduce((a, r) => a + r.sum, 0) / n : 0;
-  return { paragraphs, words, conf };
+  return { blocks, paragraphs: blocks.map((b) => b.text), words, conf };
 }
 
 const bengaliShare = (paras) => {
@@ -165,5 +225,5 @@ export async function readPage(canvas, onProgress = () => {}) {
   }
   onProgress(1);
   const words = r.words.map((w) => ({ t: w.t, x0: w.x0 / k, y0: w.y0 / k, x1: w.x1 / k, y1: w.y1 / k }));
-  return { paragraphs: r.paragraphs, words };
+  return { paragraphs: r.paragraphs, blocks: r.blocks, words };
 }

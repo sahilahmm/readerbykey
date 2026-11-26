@@ -83,3 +83,9 @@ Settings menu (`#setBtn`, `#menu`: Vibration `reader.haptics`, Dark mode). Pill:
 - Capture only stores the photo (`take`); `p.ready` finds corners in the background (`tighten` pulls them in by TRIM=3.5%). Full-size enhance/OCR/JPEG happen in `save` page by page with a progress ring (`ring(f)`, svg in #dock, ResizeObserver keeps it sized).
 - `ocr.js`: pool of up to 3 workers, page split into bands at blank rows (`cuts`), merged; low-confidence lines dropped; eng first, eng+ben only if conf < 60 and Bengali letters >= 20% (then remembered in `lastLangs`).
 - Word always runs OCR (text only); falls back to the picture Word file only if OCR can't load. `export.js` defaults: complex-script font Nirmala UI, bidi lang bn-BD.
+
+## 1.9.1.2
+- `ocr.js` `structure()` builds blocks {kind h1|h2|p, text, runs[{t,b}]} from line height (vs page median) and per-word ink density (bold); junk chars stripped (`JUNK`). `export.js` buildDocx accepts `{runs}` paragraphs.
+- Progress = `.dock::before` gradient driven by registered `@property --p` (inherits: true). `ring(f)` in scan-ui sets it.
+- Capture: `take` stores photo; `locate(p)` runs on a promise queue; thumbnails updated in place (no strip rebuild). Draft of pages persisted to IndexedDB `reader-scan` (`draft()`/`restore()`), plus Capacitor App `appRestoredResult` for a camera result delivered after the activity was recreated.
+- `dq.js` rejects non-rectangular NN quads (`plausible`).
