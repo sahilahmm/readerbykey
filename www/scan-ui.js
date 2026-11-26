@@ -7,6 +7,7 @@ const LONG = 450; // ms held still on a thumbnail to adjust its corners
 const $ = (id) => document.getElementById(id);
 const MAX_PAGES = 30;
 const SAVE_PX = 1800;
+const TRIM = 0.035; // how far the auto-crop is pulled in from the detected page edge
 const frame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 30)));
 
 export function createScanner({ openBlob, toast, buzz, loadExport, store, setMode, defaultMode, say }) {
@@ -22,7 +23,7 @@ export function createScanner({ openBlob, toast, buzz, loadExport, store, setMod
     strip.replaceChildren();
     for (const p of pages) {
       const t = document.createElement("div");
-      t.className = "t";
+      t.className = p.unsure ? "t warn" : "t";
       const img = document.createElement("img");
       img.src = p.url;
       img.alt = `Page ${pages.indexOf(p) + 1}`;
@@ -122,16 +123,58 @@ export function createScanner({ openBlob, toast, buzz, loadExport, store, setMod
   }
 
   const blobOf = (canvas, q = 0.9) => new Promise((r) => canvas.toBlob(r, "image/jpeg", q));
+  // a small picture of the page for the strip; the full-size work waits until Save
   async function render(p) {
     const src = await decode(p.src);
-    p.canvas = enhance(warp(src, p.corners, SAVE_PX), look());
-    const th = document.createElement("canvas");
-    const s = 160 / Math.max(p.canvas.width, p.canvas.height);
-    th.width = Math.round(p.canvas.width * s);
-    th.height = Math.round(p.canvas.height * s);
-    th.getContext("2d").drawImage(p.canvas, 0, 0, th.width, th.height);
+    let th;
+    if (p.corners) th = enhance(warp(src, p.corners, 360), look());
+    else {
+      th = document.createElement("canvas");
+      const k = 160 / Math.max(src.width, src.height);
+      th.width = Math.round(src.width * k);
+      th.height = Math.round(src.height * k);
+      th.getContext("2d").drawImage(src, 0, 0, th.width, th.height);
+    }
     if (p.url) URL.revokeObjectURL(p.url);
     p.url = URL.createObjectURL(await blobOf(th, 0.8));
+  }
+  // trim the page's outline in a little, so the edge of the table or the page's shadow stays out
+  const tighten = (q) => {
+    const cx = q.reduce((t, c) => t + c[0], 0) / 4, cy = q.reduce((t, c) => t + c[1], 0) / 4;
+    const o = q.map(([x, y]) => [x + (cx - x) * TRIM, y + (cy - y) * TRIM]);
+    o.sure = q.sure;
+    return o;
+  };
+  // the progress ring around the pill
+  const dock = $("dock");
+  let ringEl = null;
+  function layoutRing() {
+    if (!ringEl) return;
+    const w = dock.offsetWidth + 12, h = dock.offsetHeight + 12;
+    ringEl.setAttribute("viewBox", `0 0 ${w} ${h}`);
+    for (const r of ringEl.children) {
+      r.setAttribute("x", 2);
+      r.setAttribute("y", 2);
+      r.setAttribute("width", w - 4);
+      r.setAttribute("height", h - 4);
+      r.setAttribute("rx", (h - 4) / 2);
+    }
+  }
+  if (typeof ResizeObserver !== "undefined") new ResizeObserver(layoutRing).observe(dock); // the pill changes size as it morphs
+  function ring(f) {
+    if (f == null) {
+      dock.classList.remove("busy");
+      return;
+    }
+    if (!ringEl) {
+      ringEl = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      ringEl.setAttribute("class", "ring");
+      ringEl.innerHTML = '<rect class="track" pathLength="100"/><rect class="bar" pathLength="100"/>';
+      dock.append(ringEl);
+    }
+    layoutRing();
+    ringEl.lastChild.setAttribute("stroke-dasharray", `${Math.max(0.5, Math.min(1, f)) * 100} 100`);
+    dock.classList.add("busy");
   }
   async function decode(blob) {
     const bmp = await createImageBitmap(blob);
@@ -143,10 +186,9 @@ export function createScanner({ openBlob, toast, buzz, loadExport, store, setMod
     return c;
   }
 
+  // a new photo is kept at once; finding the page and everything else happens later, out of the way
   async function take(file) {
     busy = true;
-    say("Processing…");
-    await frame();
     try {
       const bmp = await createImageBitmap(file);
       const k = Math.min(1, 3200 / Math.max(bmp.width, bmp.height));
@@ -155,17 +197,27 @@ export function createScanner({ openBlob, toast, buzz, loadExport, store, setMod
       src.height = Math.round(bmp.height * k);
       src.getContext("2d").drawImage(bmp, 0, 0, src.width, src.height);
       bmp.close && bmp.close();
-      await frame();
-      const p = { src: await blobOf(src), corners: await findPage(src), canvas: null, url: "" }; // the photo is kept as a small JPEG so a page can be adjusted later
+      const p = { src: await blobOf(src), corners: null, url: "", ready: null }; // the photo is kept as a small JPEG so a page can be adjusted later
       await render(p);
       pages.push(p);
       buzz("ok");
-      if (!p.corners.sure) {
-        paint();
-        toast("Check the corners");
-        busy = false;
-        return openEdit(p); // the page edge wasn't clear: let the person confirm it
-      }
+      p.ready = (async () => {
+        let sure = true;
+        try {
+          const c = await findPage(src);
+          sure = c.sure;
+          p.corners = tighten(c);
+        } catch {
+          p.corners = [[0.04, 0.04], [0.96, 0.04], [0.96, 0.96], [0.04, 0.96]];
+          sure = false;
+        }
+        p.unsure = !sure;
+        await render(p);
+        if (pages.includes(p)) {
+          paint();
+          if (!sure && !editing && !busy) toast("Hold the page to check its corners");
+        }
+      })();
     } catch {
       toast("That photo couldn't be read");
     }
@@ -194,6 +246,7 @@ export function createScanner({ openBlob, toast, buzz, loadExport, store, setMod
   }
   async function openEdit(p) {
     if (busy || editing) return;
+    await p.ready;
     buzz("medium");
     const src = await decode(p.src);
     editing = { p, src, corners: p.corners.map((c) => [...c]) };
@@ -252,6 +305,7 @@ export function createScanner({ openBlob, toast, buzz, loadExport, store, setMod
     await frame();
     p.src = await blobOf(src);
     p.corners = corners;
+    p.unsure = false;
     await render(p);
     busy = false;
     buzz("ok");
@@ -262,61 +316,68 @@ export function createScanner({ openBlob, toast, buzz, loadExport, store, setMod
   $("eApply").addEventListener("click", applyEdit);
   window.addEventListener("resize", () => editing && drawEdit());
 
-  // read the words on one page: a larger render than the saved one, so small print is still legible
-  async function readOne(p, readPage) {
-    const src = await decode(p.src);
-    const big = enhance(warp(src, p.corners, 2600), look());
-    const r = await readPage(big);
-    const k = p.canvas.width / big.width;
-    return { paragraphs: r.paragraphs, words: r.words.map((w) => ({ t: w.t, x0: w.x0 * k, y0: w.y0 * k, x1: w.x1 * k, y1: w.y1 * k })) };
-  }
-
   async function save(kind) {
     if (!pages.length || busy) return;
     busy = true;
     buzz("ok");
+    const n = pages.length;
     say("Processing…");
+    ring(0);
     await frame();
     const d = new Date();
-    const pad = (n) => String(n).padStart(2, "0");
+    const pad = (x) => String(x).padStart(2, "0");
     const name = `Scan ${d.getDate()} ${d.toLocaleString("en", { month: "short" })} ${pad(d.getHours())}${pad(d.getMinutes())}`;
-    const ocr = store("reader.scanOcr") !== "off";
+    const ocr = kind === "word" || store("reader.scanOcr") !== "off"; // Word is only text, so it always reads
     try {
-      let texts = null;
+      let ocrMod = null;
       if (ocr) {
-        let ocrMod = null;
         try {
           ocrMod = await import("./ocr.js");
-          texts = [];
-          for (let i = 0; i < pages.length; i++) {
-            say(`Reading page ${i + 1} of ${pages.length}…`);
-            await frame();
-            texts.push(await readOne(pages[i], ocrMod.readPage));
-          }
         } catch {
-          texts = null;
           toast("Text recognition isn't available here");
         }
-        if (ocrMod) await ocrMod.stopOcr();
       }
-      say("Processing…");
-      await frame();
       const imgs = [];
-      for (let i = 0; i < pages.length; i++) imgs.push({ jpeg: await toJpeg(pages[i].canvas, 0.85), w: pages[i].canvas.width, h: pages[i].canvas.height, words: texts && texts[i].words });
-      const found = texts && texts.some((t) => t.paragraphs.length);
+      const texts = ocrMod ? [] : null;
+      for (let i = 0; i < n; i++) {
+        const p = pages[i];
+        await p.ready;
+        const src = await decode(p.src);
+        const base = i / n, share = 1 / n;
+        say(`Page ${i + 1} of ${n}…`);
+        ring(base);
+        await frame();
+        let r = null, big = null;
+        if (ocrMod) {
+          big = enhance(warp(src, p.corners, 2600), look());
+          r = await ocrMod.readPage(big, (f) => ring(base + share * (0.1 + 0.8 * f)));
+          texts.push(r);
+        }
+        if (kind !== "word" || !ocrMod) {
+          const cv = enhance(warp(src, p.corners, SAVE_PX), look());
+          const k = r ? cv.width / big.width : 1;
+          imgs.push({ jpeg: await toJpeg(cv, 0.85), w: cv.width, h: cv.height, words: r && r.words.map((w) => ({ t: w.t, x0: w.x0 * k, y0: w.y0 * k, x1: w.x1 * k, y1: w.y1 * k })) });
+        }
+        ring(base + share);
+      }
+      if (ocrMod) await ocrMod.stopOcr();
+      say("Saving…");
+      await frame();
       let blob, filename;
       if (kind === "word") {
         const x = await loadExport();
-        blob = found ? x.buildDocx(texts.map((t) => (t.paragraphs.length ? t.paragraphs : [""])), name) : x.buildImageDocx(imgs, name);
+        blob = texts ? x.buildDocx(texts.map((t) => (t.paragraphs.length ? t.paragraphs : [""])), name) : x.buildImageDocx(imgs, name);
         filename = `${name}.docx`;
       } else {
         blob = makePdf(imgs, name);
         filename = `${name}.pdf`;
       }
+      ring(null);
       end();
       await openBlob(blob, filename, `scan|${Date.now()}`);
     } catch {
       busy = false;
+      ring(null);
       toast("Couldn't save the scan");
       paint();
     }

@@ -78,3 +78,8 @@ Settings menu (`#setBtn`, `#menu`: Vibration `reader.haptics`, Dark mode). Pill:
 - `enhance` "doc" mode uses smoothstep(105..185) so show-through (>~185 after background division) turns white.
 - Size breakdown (1.9 APK, compressed): docquad 12.4 MB, ort.wasm 2.9, eng.traineddata 2.9, tesseract cores 2x1.5, ben 1.4. Bangla is NOT the big item.
 - OCR: ~2.4-3.8 s/page on desktop; prose accurate, formulas not. Ideas: parallel workers on line-gap bands; PaddleOCR v5 (no Bangla).
+
+## 1.9.1.1
+- Capture only stores the photo (`take`); `p.ready` finds corners in the background (`tighten` pulls them in by TRIM=3.5%). Full-size enhance/OCR/JPEG happen in `save` page by page with a progress ring (`ring(f)`, svg in #dock, ResizeObserver keeps it sized).
+- `ocr.js`: pool of up to 3 workers, page split into bands at blank rows (`cuts`), merged; low-confidence lines dropped; eng first, eng+ben only if conf < 60 and Bengali letters >= 20% (then remembered in `lastLangs`).
+- Word always runs OCR (text only); falls back to the picture Word file only if OCR can't load. `export.js` defaults: complex-script font Nirmala UI, bidi lang bn-BD.
