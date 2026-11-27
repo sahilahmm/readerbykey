@@ -35,7 +35,7 @@ const paged = (kind) => kind === "pdf" || kind === "pptx"; // read page by page
 const $ = (id) => document.getElementById(id);
 const els = Object.fromEntries(
   [
-    "home", "reader", "shelf", "list", "hero", "greeting", "viewLabel", "allChip", "setBtn", "menu", "optVib", "optDark", "bScan", "groupChip", "dock", "fileInput",
+    "home", "reader", "shelf", "list", "hero", "greeting", "viewLabel", "allChip", "setBtn", "menu", "optVib", "optDark", "optBook", "bScan", "groupChip", "dock", "fileInput",
     "bOpen", "bAdd", "bShare", "bDelete", "bArchive", "archiveLabel",
     "bPdf", "bWord", "bYes", "bNo", "bBack", "dockMsg",
     "title", "backBtn", "textBtn", "nightBtn", "zoomIn", "zoomOut",
@@ -215,7 +215,7 @@ document.addEventListener(
   (e) => {
     const t = e.target.closest && e.target.closest("button, .dot, .pin, .card");
     if (!t) return;
-    if (t.matches("#optDark, #optVib, #setBtn, #nightBtn, #textBtn")) buzz("medium");
+    if (t.matches("#optDark, #optVib, #optBook, #setBtn, #nightBtn, #textBtn")) buzz("medium");
     else if (t.matches(".pin")) buzz("double");
     else if (t.matches("#zoomIn, #zoomOut, .dot")) buzz("select");
     else if (t.matches("#pill")) buzz("soft");
@@ -1282,6 +1282,7 @@ function layout() {
     p.el.style.height = `${p.h}px`;
   }
   measureTops();
+  syncFit();
 }
 
 function measureTops() {
@@ -1754,6 +1755,70 @@ els.optVib.addEventListener("click", () => {
     buzz("ok");
   } else store("reader.haptics", "off");
 });
+
+/* Book mode: a sideways swipe turns the page, like a book */
+function syncFit() {
+  // pages that fit the screen at normal size need no up-and-down scrolling in book mode
+  const sc = els.scroller;
+  const fits = state.book && Math.abs(state.zoom - 1) < 0.05 && state.pages.every((p) => p.h <= sc.clientHeight + 2);
+  els.reader.classList.toggle("fit", !!fits);
+}
+function applyBook(on) {
+  state.book = on;
+  els.reader.classList.toggle("book", on);
+  els.optBook.setAttribute("aria-checked", String(on));
+  syncFit();
+}
+applyBook(store("reader.book") === "on");
+els.optBook.addEventListener("click", () => {
+  const on = els.optBook.getAttribute("aria-checked") !== "true";
+  store("reader.book", on ? "on" : "off");
+  applyBook(on);
+});
+function turnPage(dir) {
+  if (!state.pages.length || state.turning) return;
+  const cur = state.current;
+  const to = clamp(cur + dir, 0, state.pages.length - 1);
+  const el = els.pages;
+  const go = () => {
+    scrollToAnchor({ idx: to, frac: 0 }, 8);
+    schedule();
+  };
+  state.turning = true;
+  const done = () => (state.turning = false);
+  if (to === cur || !el.animate) {
+    if (to !== cur) go();
+    if (to === cur && el.animate) el.animate([{ transform: "none" }, { transform: `translateX(${-dir * 14}px)` }, { transform: "none" }], { duration: 180 }); // nothing further: a small bounce
+    return void setTimeout(done, 200);
+  }
+  buzz("tick");
+  const out = el.animate([{ transform: "none", opacity: 1 }, { transform: `translateX(${-dir * 70}px) rotateY(${dir * 18}deg)`, opacity: 0 }], { duration: 130, easing: "ease-in" });
+  out.onfinish = () => {
+    go();
+    el.animate([{ transform: `translateX(${dir * 70}px) rotateY(${-dir * 18}deg)`, opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 200, easing: "ease-out" }).onfinish = done;
+  };
+}
+{
+  let t0 = null;
+  els.scroller.addEventListener(
+    "touchstart",
+    (e) => {
+      t0 = state.book && !state.text && e.touches.length === 1 && Math.abs(state.zoom - 1) < 0.05 ? { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() } : null;
+    },
+    { passive: true }
+  );
+  els.scroller.addEventListener("touchmove", (e) => e.touches.length > 1 && (t0 = null), { passive: true });
+  els.scroller.addEventListener(
+    "touchend",
+    (e) => {
+      if (!t0) return;
+      const c = e.changedTouches[0], dx = c.clientX - t0.x, dy = c.clientY - t0.y, quick = Date.now() - t0.t < 700;
+      t0 = null;
+      if (quick && Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) turnPage(dx < 0 ? 1 : -1);
+    },
+    { passive: true }
+  );
+}
 
 function applyNight(on) {
   state.night = on;

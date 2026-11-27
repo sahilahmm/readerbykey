@@ -89,3 +89,7 @@ Settings menu (`#setBtn`, `#menu`: Vibration `reader.haptics`, Dark mode). Pill:
 - Progress = `.dock::before` gradient driven by registered `@property --p` (inherits: true). `ring(f)` in scan-ui sets it.
 - Capture: `take` stores photo; `locate(p)` runs on a promise queue; thumbnails updated in place (no strip rebuild). Draft of pages persisted to IndexedDB `reader-scan` (`draft()`/`restore()`), plus Capacitor App `appRestoredResult` for a camera result delivered after the activity was recreated.
 - `dq.js` rejects non-rectangular NN quads (`plausible`).
+
+## 1.9.1.3
+- Book mode: `#optBook` (reader.book = on/off), `.book`/`.fit` classes on #reader (`syncFit` locks vertical scroll when every page fits the screen at zoom 1), `turnPage(dir)` animates #pages (WAAPI) and uses `scrollToAnchor`. Touch swipe handler on #scroller; ignored when zoomed, pinching or in text view.
+- `.boox`: not implemented. Onyx documents `.note` (undocumented protobuf archive) only; waiting for a sample file from the user.

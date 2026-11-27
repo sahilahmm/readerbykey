@@ -612,6 +612,7 @@ button { font: inherit; color: inherit; }
 .menu[hidden] { display: none; }
 .opt { width: 44px; height: 44px; padding: 0; border-radius: 50%; display: grid; place-items: center; background: var(--soft); border: 1px solid var(--line); color: var(--ink); opacity: 0.75; animation: rise 0.2s ease both; }
 .opt:nth-child(2) { animation-delay: 0.05s; }
+.opt:nth-child(3) { animation-delay: 0.1s; }
 .opt .ic { width: 22px; height: 22px; }
 .opt[aria-checked="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); opacity: 1; }
 .opt .slash { stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; }
@@ -648,3 +649,7 @@ button { font: inherit; color: inherit; }
 .dock::before { content: ""; position: absolute; inset: 0; z-index: 3; border-radius: inherit; pointer-events: none; opacity: 0; transition: --p 0.35s ease-out, opacity 0.2s; background: linear-gradient(90deg, rgba(255, 255, 255, 0.28) calc(var(--p) * 1%), transparent calc(var(--p) * 1%)); }
 .dock.busy::before { opacity: 1; }
 .thumbs .t.warn::after { content: ""; position: absolute; right: 4px; bottom: 4px; width: 9px; height: 9px; border-radius: 50%; background: #e0a030; }
+
+/* book mode: pages that fit the screen are turned with a sideways swipe, not scrolled */
+.fit .scroller { overflow-y: hidden; }
+.book .pages { perspective: 900px; }
