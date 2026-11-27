@@ -1795,9 +1795,11 @@ function bookDraw(i, vw, vh, zoom = 1) {
     if (gen !== state.gen) return wrap;
     const base = page.getViewport({ scale: 1 });
     const fit = Math.min(vw / base.width, vh / base.height);
-    let scale = fit * zoom * Math.min(window.devicePixelRatio || 1, 2.5);
+    // a page the size of the screen: big canvases make the phone stall when they reach the screen
+    let scale = fit * zoom * Math.min(window.devicePixelRatio || 1, 2);
     const pixels = base.width * scale * (base.height * scale);
-    if (pixels > MAX_PIXELS) scale *= Math.sqrt(MAX_PIXELS / pixels);
+    const cap = zoom > 1 ? 9_000_000 : 3_600_000;
+    if (pixels > cap) scale *= Math.sqrt(cap / pixels);
     const viewport = page.getViewport({ scale });
     const canvas = document.createElement("canvas");
     canvas.width = Math.max(1, Math.floor(viewport.width));

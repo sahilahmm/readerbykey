@@ -1,3 +1,7 @@
+## 1.9.1.6
+- Fixed the stutter when a swipe finishes: pages are now drawn one at a time in quiet moments, only the next and previous page are prepared, and a new swipe cancels pending drawing.
+- Book pages are drawn at screen size instead of oversized, so they reach the screen without a stall (zooming still re-draws sharper).
+
 ## 1.9.1.5
 - A book button in the top-right corner of the reader switches book pages on or off (it hides with the toolbar).
 - Smoother page turns: pages are drawn only after a swipe settles, the next pages are prepared in order, and the page-turn sound of the phone's tick waits for the swipe to land.

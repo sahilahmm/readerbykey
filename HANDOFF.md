@@ -98,3 +98,6 @@ Settings menu (`#setBtn`, `#menu`: Vibration `reader.haptics`, Dark mode). Pill:
 - Book view: pinch/double-tap zoom in `book.js` (transform on the current page node, re-rendered sharper through `draw(i,w,h,zoom)` after 250 ms), pages are filled only after scrolling is idle (`settle`), assist-scroll only when the native snap won't advance. Reader button `#bookBtn` mirrors `#optBook`.
 - PDF.js is lazy: `loadPdf()` in app.js (startup no longer parses ~0.5 MB of pdf.js).
 - Dead-code scan (unreferenced top-level functions/CSS classes) found nothing left.
+
+## 1.9.1.6
+Stutter fix (from a screen recording: 90-240 ms freezes right after a swipe). Cause: `book.js settle()` drew up to 5 pages at once with oversized canvases (DPR 2.5, 14 MP cap). Now `settle()` fills current, +1, -1 serially with a quiet gap and stops if a new swipe starts; `bookDraw` caps canvases at 3.6 MP (9 MP when zoomed), DPR max 2. Test: `t52.py` style long-task count under 4x CPU throttle went from 4 long tasks to 0.

@@ -68,13 +68,24 @@ export function createBook({ host, count, draw, release, onPage, onTap }) {
       n.style.transform = a < 0.001 ? "" : `rotateY(${t * -28}deg) scale(${1 - a * 0.1})`;
     }
   }
-  // fill the page being looked at first, then its neighbours, and only while nothing is moving
-  function settle() {
-    if (dead) return;
+  // fill the page being looked at first, then one neighbour at a time, each in its own quiet moment
+  let filling = false;
+  const quiet = () => new Promise((r) => setTimeout(() => requestAnimationFrame(r), 120));
+  async function settle() {
+    if (dead || filling) return;
     if (performance.now() - moving < 90) return void (idle = setTimeout(settle, 100));
-    const order = [cur, cur + 1, cur - 1, cur + 2, cur - 2].filter((i) => i >= 0 && i < count);
-    for (const i of order) fill(i);
-    for (let i = 0; i < count; i++) if (Math.abs(i - cur) > 2 && slots[i].node) drop(i);
+    filling = true;
+    try {
+      for (const i of [cur, cur + 1, cur - 1].filter((i) => i >= 0 && i < count)) {
+        if (dead || performance.now() - moving < 90) break; // a new swipe began: leave the rest for later
+        await fill(i);
+        await quiet();
+      }
+      for (let i = 0; i < count; i++) if (Math.abs(i - cur) > 2 && slots[i].node) drop(i);
+    } finally {
+      filling = false;
+    }
+    if (!dead && performance.now() - moving < 90) idle = setTimeout(settle, 100);
   }
   function update() {
     const idx = Math.max(0, Math.min(count - 1, Math.round(host.scrollLeft / width())));
