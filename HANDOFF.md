@@ -93,3 +93,8 @@ Settings menu (`#setBtn`, `#menu`: Vibration `reader.haptics`, Dark mode). Pill:
 ## 1.9.1.3 / 1.9.1.4 book mode
 - Setting `#optBook` (localStorage reader.book). `www/book.js` `createBook`: horizontal flex of full-screen slots with CSS scroll-snap (x mandatory, stop always), lazy pages (+-2), tilt in the scroll handler, touchend assist for short swipes, rebuild on resize. `app.js`: `enterBook/leaveBook/applyBook/bookDraw`; `#bookView` overlays `#scroller` (`.booking` hides scroller and zoom buttons); saveProgress/jump form/closeDocument know about `state.bookView`.
 - `.boox`: not implemented. Onyx documents `.note` (undocumented protobuf archive) only; waiting for a sample file from the user.
+
+## 1.9.1.5
+- Book view: pinch/double-tap zoom in `book.js` (transform on the current page node, re-rendered sharper through `draw(i,w,h,zoom)` after 250 ms), pages are filled only after scrolling is idle (`settle`), assist-scroll only when the native snap won't advance. Reader button `#bookBtn` mirrors `#optBook`.
+- PDF.js is lazy: `loadPdf()` in app.js (startup no longer parses ~0.5 MB of pdf.js).
+- Dead-code scan (unreferenced top-level functions/CSS classes) found nothing left.

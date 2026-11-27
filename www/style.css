@@ -659,3 +659,7 @@ button { font: inherit; color: inherit; }
 .booking .scroller { visibility: hidden; }
 .booking:not(.as-text) #zoomOut, .booking:not(.as-text) #zoomIn { display: none; }
 .as-text .bookview { visibility: hidden; }
+.rbook { z-index: 6; background: var(--soft); color: var(--ink); transition: opacity 0.2s, transform 0.2s; }
+.rbook[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.chrome-hidden .rbook, .as-text .rbook { opacity: 0; pointer-events: none; transform: scale(0.9); }
+.bp .page { transition: none; }

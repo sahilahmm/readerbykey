@@ -1,7 +1,14 @@
-import * as pdfjsLib from "./lib/pdf.min.mjs";
 import { createBook } from "./book.js";
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("./lib/pdf.worker.min.mjs", import.meta.url).href;
+// PDF.js is big: it loads the first time a PDF is opened, not when the app starts
+let pdfjsLib = null;
+async function loadPdf() {
+  if (!pdfjsLib) {
+    pdfjsLib = await import("./lib/pdf.min.mjs");
+    pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("./lib/pdf.worker.min.mjs", import.meta.url).href;
+  }
+  return pdfjsLib;
+}
 
 /* ------------------------------------------------------------------ *
  *  Setup
@@ -36,7 +43,7 @@ const paged = (kind) => kind === "pdf" || kind === "pptx"; // read page by page
 const $ = (id) => document.getElementById(id);
 const els = Object.fromEntries(
   [
-    "home", "reader", "shelf", "list", "hero", "greeting", "viewLabel", "allChip", "setBtn", "menu", "optVib", "optDark", "optBook", "bookView", "bScan", "groupChip", "dock", "fileInput",
+    "home", "reader", "shelf", "list", "hero", "greeting", "viewLabel", "allChip", "setBtn", "menu", "optVib", "optDark", "optBook", "bookBtn", "bookView", "bScan", "groupChip", "dock", "fileInput",
     "bOpen", "bAdd", "bShare", "bDelete", "bArchive", "archiveLabel",
     "bPdf", "bWord", "bYes", "bNo", "bBack", "dockMsg",
     "title", "backBtn", "textBtn", "nightBtn", "zoomIn", "zoomOut",
@@ -216,7 +223,7 @@ document.addEventListener(
   (e) => {
     const t = e.target.closest && e.target.closest("button, .dot, .pin, .card");
     if (!t) return;
-    if (t.matches("#optDark, #optVib, #optBook, #setBtn, #nightBtn, #textBtn")) buzz("medium");
+    if (t.matches("#optDark, #optVib, #optBook, #bookBtn, #setBtn, #nightBtn, #textBtn")) buzz("medium");
     else if (t.matches(".pin")) buzz("double");
     else if (t.matches("#zoomIn, #zoomOut, .dot")) buzz("select");
     else if (t.matches("#pill")) buzz("soft");
@@ -832,7 +839,7 @@ async function shareSelected(how) {
       if (!rec) throw new Error("missing file");
       const base = x.safeName(stripExt(m.name));
       if (word) {
-        const pages = await x.textOfBlob(pdfjsLib, rec.blob);
+        const pages = await x.textOfBlob(await loadPdf(), rec.blob);
         if (!pages.some((p) => p.length)) {
           skipped++;
           continue;
@@ -1102,6 +1109,7 @@ async function openDocument({ id, name, blob, meta, persist }) {
 }
 
 async function showPdf(gen, id, name, blob, meta) {
+  await loadPdf();
   const data = new Uint8Array(await blob.arrayBuffer());
   const task = pdfjsLib.getDocument({ data, ...PDF_OPTIONS });
   task.onPassword = (update, reason) => {
@@ -1767,7 +1775,7 @@ els.optVib.addEventListener("click", () => {
 });
 
 /* Book mode: every page fills the screen and a swipe turns it (www/book.js) */
-function bookDraw(i, vw, vh) {
+function bookDraw(i, vw, vh, zoom = 1) {
   return (async () => {
     const gen = state.gen;
     const wrap = document.createElement("div");
@@ -1787,7 +1795,7 @@ function bookDraw(i, vw, vh) {
     if (gen !== state.gen) return wrap;
     const base = page.getViewport({ scale: 1 });
     const fit = Math.min(vw / base.width, vh / base.height);
-    let scale = fit * Math.min(window.devicePixelRatio || 1, 2.5);
+    let scale = fit * zoom * Math.min(window.devicePixelRatio || 1, 2.5);
     const pixels = base.width * scale * (base.height * scale);
     if (pixels > MAX_PIXELS) scale *= Math.sqrt(MAX_PIXELS / pixels);
     const viewport = page.getViewport({ scale });
@@ -1839,6 +1847,7 @@ function leaveBook() {
 function applyBook(on) {
   state.book = on;
   els.optBook.setAttribute("aria-checked", String(on));
+  els.bookBtn.setAttribute("aria-pressed", String(on));
   if (!state.open || !paged(state.kind) || !state.pages.length) return;
   if (on) enterBook(state.current);
   else {
@@ -1849,11 +1858,14 @@ function applyBook(on) {
 }
 state.book = store("reader.book") === "on";
 els.optBook.setAttribute("aria-checked", String(state.book));
-els.optBook.addEventListener("click", () => {
-  const on = els.optBook.getAttribute("aria-checked") !== "true";
+els.bookBtn.setAttribute("aria-pressed", String(state.book));
+const flipBook = () => {
+  const on = !state.book;
   store("reader.book", on ? "on" : "off");
   applyBook(on);
-});
+};
+els.optBook.addEventListener("click", flipBook);
+els.bookBtn.addEventListener("click", flipBook);
 
 function applyNight(on) {
   state.night = on;
