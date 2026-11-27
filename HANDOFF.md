@@ -90,6 +90,6 @@ Settings menu (`#setBtn`, `#menu`: Vibration `reader.haptics`, Dark mode). Pill:
 - Capture: `take` stores photo; `locate(p)` runs on a promise queue; thumbnails updated in place (no strip rebuild). Draft of pages persisted to IndexedDB `reader-scan` (`draft()`/`restore()`), plus Capacitor App `appRestoredResult` for a camera result delivered after the activity was recreated.
 - `dq.js` rejects non-rectangular NN quads (`plausible`).
 
-## 1.9.1.3
-- Book mode: `#optBook` (reader.book = on/off), `.book`/`.fit` classes on #reader (`syncFit` locks vertical scroll when every page fits the screen at zoom 1), `turnPage(dir)` animates #pages (WAAPI) and uses `scrollToAnchor`. Touch swipe handler on #scroller; ignored when zoomed, pinching or in text view.
+## 1.9.1.3 / 1.9.1.4 book mode
+- Setting `#optBook` (localStorage reader.book). `www/book.js` `createBook`: horizontal flex of full-screen slots with CSS scroll-snap (x mandatory, stop always), lazy pages (+-2), tilt in the scroll handler, touchend assist for short swipes, rebuild on resize. `app.js`: `enterBook/leaveBook/applyBook/bookDraw`; `#bookView` overlays `#scroller` (`.booking` hides scroller and zoom buttons); saveProgress/jump form/closeDocument know about `state.bookView`.
 - `.boox`: not implemented. Onyx documents `.note` (undocumented protobuf archive) only; waiting for a sample file from the user.

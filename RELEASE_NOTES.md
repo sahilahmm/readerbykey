@@ -1,2 +1,3 @@
-## 1.9.1.3
-- New setting (book icon in the settings menu): turn pages like a book. Swipe left for the next page, right for the previous one, with a page-turn animation.
+## 1.9.1.4
+- Book mode reworked: every page fills the screen, the page follows your finger and settles with the phone's own snapping scroll, with a soft page-swing as it turns. A short or quick swipe also turns the page.
+- Your place is saved and the page counter updates as you swipe.

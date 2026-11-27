@@ -1,4 +1,5 @@
 import * as pdfjsLib from "./lib/pdf.min.mjs";
+import { createBook } from "./book.js";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("./lib/pdf.worker.min.mjs", import.meta.url).href;
 
@@ -35,7 +36,7 @@ const paged = (kind) => kind === "pdf" || kind === "pptx"; // read page by page
 const $ = (id) => document.getElementById(id);
 const els = Object.fromEntries(
   [
-    "home", "reader", "shelf", "list", "hero", "greeting", "viewLabel", "allChip", "setBtn", "menu", "optVib", "optDark", "optBook", "bScan", "groupChip", "dock", "fileInput",
+    "home", "reader", "shelf", "list", "hero", "greeting", "viewLabel", "allChip", "setBtn", "menu", "optVib", "optDark", "optBook", "bookView", "bScan", "groupChip", "dock", "fileInput",
     "bOpen", "bAdd", "bShare", "bDelete", "bArchive", "archiveLabel",
     "bPdf", "bWord", "bYes", "bNo", "bBack", "dockMsg",
     "title", "backBtn", "textBtn", "nightBtn", "zoomIn", "zoomOut",
@@ -1147,6 +1148,7 @@ async function showPdf(gen, id, name, blob, meta) {
   const start = { idx: clamp(meta.idx || 0, 0, pdf.numPages - 1), frac: meta.frac || 0 };
   if (start.idx === 0 && start.frac <= 0) els.scroller.scrollTop = 0;
   else scrollToAnchor(start, 8);
+  if (state.book) enterBook(start.idx);
   setChrome(true);
   updateVisible();
   loadSizes(gen);
@@ -1192,6 +1194,7 @@ async function showDeck(gen, id, name, blob, meta) {
   const start = { idx: clamp(meta.idx || 0, 0, deck.slides.length - 1), frac: meta.frac || 0 };
   if (start.idx === 0 && start.frac <= 0) els.scroller.scrollTop = 0;
   else scrollToAnchor(start, 8);
+  if (state.book) enterBook(start.idx);
   setChrome(true);
   updateVisible();
   return true;
@@ -1259,6 +1262,7 @@ function closeDocument() {
   els.reader.classList.remove("textdoc");
   setTextView(false);
   els.textView.replaceChildren();
+  leaveBook();
   els.pages.replaceChildren();
 }
 
@@ -1282,7 +1286,6 @@ function layout() {
     p.el.style.height = `${p.h}px`;
   }
   measureTops();
-  syncFit();
 }
 
 function measureTops() {
@@ -1529,6 +1532,13 @@ els.textView.addEventListener(
 function saveProgress(now) {
   if (!state.open || !state.meta) return;
   if (paged(state.kind)) {
+    if (state.bookView) {
+      const i = state.bookView.index();
+      Object.assign(state.meta, { idx: i, frac: 0, page: i + 1, zoom: state.zoom, openedAt: Date.now() });
+      const q = putMeta({ ...state.meta });
+      if (!now) q.catch(() => {});
+      return;
+    }
     if (!state.pdf || !state.pages.length || state.text) return;
     const a = getAnchor(0);
     Object.assign(state.meta, {
@@ -1756,69 +1766,94 @@ els.optVib.addEventListener("click", () => {
   } else store("reader.haptics", "off");
 });
 
-/* Book mode: a sideways swipe turns the page, like a book */
-function syncFit() {
-  // pages that fit the screen at normal size need no up-and-down scrolling in book mode
-  const sc = els.scroller;
-  const fits = state.book && Math.abs(state.zoom - 1) < 0.05 && state.pages.every((p) => p.h <= sc.clientHeight + 2);
-  els.reader.classList.toggle("fit", !!fits);
+/* Book mode: every page fills the screen and a swipe turns it (www/book.js) */
+function bookDraw(i, vw, vh) {
+  return (async () => {
+    const gen = state.gen;
+    const wrap = document.createElement("div");
+    wrap.className = "page";
+    if (state.kind === "pptx") {
+      const deck = state.deck;
+      const fit = Math.min(vw / deck.w, vh / deck.h);
+      wrap.style.width = `${deck.w * fit}px`;
+      wrap.style.height = `${deck.h * fit}px`;
+      const el = state.deckMod.drawSlide(deck.slides[i], deck);
+      el.style.transform = `scale(${fit})`;
+      wrap.append(el);
+      state.deckMod.fitSlide(el);
+      return wrap;
+    }
+    const page = await state.pdf.getPage(i + 1);
+    if (gen !== state.gen) return wrap;
+    const base = page.getViewport({ scale: 1 });
+    const fit = Math.min(vw / base.width, vh / base.height);
+    let scale = fit * Math.min(window.devicePixelRatio || 1, 2.5);
+    const pixels = base.width * scale * (base.height * scale);
+    if (pixels > MAX_PIXELS) scale *= Math.sqrt(MAX_PIXELS / pixels);
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.floor(viewport.width));
+    canvas.height = Math.max(1, Math.floor(viewport.height));
+    await page.render({ canvasContext: canvas.getContext("2d", { alpha: false }), viewport }).promise;
+    wrap.style.width = `${base.width * fit}px`;
+    wrap.style.height = `${base.height * fit}px`;
+    wrap.append(canvas);
+    page.cleanup();
+    return wrap;
+  })();
+}
+function bookRelease(node) {
+  const c = node && node.querySelector && node.querySelector("canvas");
+  if (c) c.width = c.height = 0;
+}
+function enterBook(idx) {
+  if (state.bookView || !state.book || !state.pages.length || !paged(state.kind)) return;
+  els.reader.classList.add("booking");
+  els.bookView.hidden = false;
+  state.bookView = createBook({
+    host: els.bookView,
+    count: state.pages.length,
+    draw: bookDraw,
+    release: bookRelease,
+    onPage: (i, seen) => {
+      state.current = i;
+      els.pill.dataset.ready = "1";
+      els.pill.textContent = `${i + 1} / ${state.pages.length}`;
+      if (seen) buzz("tick");
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => saveProgress(false), 500);
+    },
+    onTap: tapToggleChrome,
+  });
+  state.bookView.goto(idx, false);
+}
+function leaveBook() {
+  if (!state.bookView) return state.current;
+  const i = state.bookView.index();
+  state.bookView.destroy();
+  state.bookView = null;
+  els.bookView.hidden = true;
+  els.reader.classList.remove("booking");
+  return i;
 }
 function applyBook(on) {
   state.book = on;
-  els.reader.classList.toggle("book", on);
   els.optBook.setAttribute("aria-checked", String(on));
-  syncFit();
+  if (!state.open || !paged(state.kind) || !state.pages.length) return;
+  if (on) enterBook(state.current);
+  else {
+    const i = leaveBook();
+    scrollToAnchor({ idx: i, frac: 0 }, 8);
+    updateVisible();
+  }
 }
-applyBook(store("reader.book") === "on");
+state.book = store("reader.book") === "on";
+els.optBook.setAttribute("aria-checked", String(state.book));
 els.optBook.addEventListener("click", () => {
   const on = els.optBook.getAttribute("aria-checked") !== "true";
   store("reader.book", on ? "on" : "off");
   applyBook(on);
 });
-function turnPage(dir) {
-  if (!state.pages.length || state.turning) return;
-  const cur = state.current;
-  const to = clamp(cur + dir, 0, state.pages.length - 1);
-  const el = els.pages;
-  const go = () => {
-    scrollToAnchor({ idx: to, frac: 0 }, 8);
-    schedule();
-  };
-  state.turning = true;
-  const done = () => (state.turning = false);
-  if (to === cur || !el.animate) {
-    if (to !== cur) go();
-    if (to === cur && el.animate) el.animate([{ transform: "none" }, { transform: `translateX(${-dir * 14}px)` }, { transform: "none" }], { duration: 180 }); // nothing further: a small bounce
-    return void setTimeout(done, 200);
-  }
-  buzz("tick");
-  const out = el.animate([{ transform: "none", opacity: 1 }, { transform: `translateX(${-dir * 70}px) rotateY(${dir * 18}deg)`, opacity: 0 }], { duration: 130, easing: "ease-in" });
-  out.onfinish = () => {
-    go();
-    el.animate([{ transform: `translateX(${dir * 70}px) rotateY(${-dir * 18}deg)`, opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 200, easing: "ease-out" }).onfinish = done;
-  };
-}
-{
-  let t0 = null;
-  els.scroller.addEventListener(
-    "touchstart",
-    (e) => {
-      t0 = state.book && !state.text && e.touches.length === 1 && Math.abs(state.zoom - 1) < 0.05 ? { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() } : null;
-    },
-    { passive: true }
-  );
-  els.scroller.addEventListener("touchmove", (e) => e.touches.length > 1 && (t0 = null), { passive: true });
-  els.scroller.addEventListener(
-    "touchend",
-    (e) => {
-      if (!t0) return;
-      const c = e.changedTouches[0], dx = c.clientX - t0.x, dy = c.clientY - t0.y, quick = Date.now() - t0.t < 700;
-      t0 = null;
-      if (quick && Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) turnPage(dx < 0 ? 1 : -1);
-    },
-    { passive: true }
-  );
-}
 
 function applyNight(on) {
   state.night = on;
@@ -1934,6 +1969,7 @@ els.jumpForm.addEventListener("submit", (e) => {
   e.preventDefault();
   const n = clamp(parseInt(els.jumpInput.value, 10) || 1, 1, state.pages.length);
   closeSheet();
+  if (state.bookView) return state.bookView.goto(n - 1, true);
   scrollToAnchor({ idx: n - 1, frac: 0 }, 12);
   updateVisible();
 });
