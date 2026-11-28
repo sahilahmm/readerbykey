@@ -672,3 +672,6 @@ button { font: inherit; color: inherit; }
 .ep-flow h2, .ep-flow h3 { max-width: none; margin: 0.6em 0 0.5em; break-after: avoid; break-inside: avoid; }
 .ep-flow img { max-width: 100%; max-height: calc(var(--ph, 600px) * 0.62); width: auto; object-fit: contain; break-inside: avoid; }
 .ep-flow .pg { break-after: column; height: 0; margin: 0; opacity: 0; }
+.icon[hidden] { display: none; }
+.rate { font: 700 13px/1 system-ui, sans-serif; width: auto; min-width: 40px; padding: 0 8px; }
+.ep-say { background: color-mix(in srgb, currentColor 14%, transparent); border-radius: 6px; }

@@ -183,6 +183,7 @@ const rules = join(root, "android", "app", "proguard-rules.pro");
 const keep = `
 -keep class com.getcapacitor.** { *; }
 -keep class com.capacitorjs.plugins.** { *; }
+-keep class com.getcapacitor.community.** { *; }
 -keep class com.keybysah.** { *; }
 -keep @com.getcapacitor.annotation.CapacitorPlugin public class * { @com.getcapacitor.annotation.PermissionCallback <methods>; @com.getcapacitor.annotation.ActivityCallback <methods>; @com.getcapacitor.PluginMethod public <methods>; }
 -keepclassmembers class * { @android.webkit.JavascriptInterface <methods>; }

@@ -47,7 +47,7 @@ const els = Object.fromEntries(
     "home", "reader", "shelf", "list", "hero", "greeting", "viewLabel", "allChip", "setBtn", "menu", "optVib", "optDark", "optBook", "bookBtn", "bookView", "bScan", "groupChip", "dock", "fileInput",
     "bOpen", "bAdd", "bShare", "bDelete", "bArchive", "archiveLabel",
     "bPdf", "bWord", "bYes", "bNo", "bBack", "dockMsg",
-    "title", "backBtn", "textBtn", "nightBtn", "zoomIn", "zoomOut",
+    "title", "backBtn", "textBtn", "readBtn", "rateBtn", "nightBtn", "zoomIn", "zoomOut",
     "scroller", "pages", "textView", "pill", "sheet", "jumpForm", "jumpInput",
     "loading", "bUndo", "pwInput",
   ].map((id) => [id, $(id)])
@@ -68,6 +68,7 @@ const state = {
   // reader
   open: false, // a document (of any kind) is open
   kind: null, // "pdf" | "docx" | "pptx" | "txt" | "epub"
+  reader: null, // read aloud, while a book is open
   epub: null, // the page-by-page book reader while a book is open
   pdf: null,
   id: null,
@@ -1274,6 +1275,7 @@ async function showTextDoc(gen, kind, id, name, blob, meta) {
       },
       onTap: tapToggleChrome,
     });
+    els.readBtn.hidden = false;
     setChrome(true);
     return true;
   }
@@ -1299,6 +1301,11 @@ function closeDocument() {
   if (state.docUrls) state.docUrls.forEach((u) => URL.revokeObjectURL(u));
   state.docUrls = null;
   els.reader.classList.remove("textdoc", "epubdoc");
+  if (state.reader) {
+    state.reader.stop();
+    state.reader = null;
+  }
+  els.readBtn.hidden = els.rateBtn.hidden = true;
   if (state.epub) {
     state.epub.destroy();
     state.epub = null;
@@ -2079,3 +2086,27 @@ refreshHome()
     announceMoved();
   })
   .catch(() => {});
+
+/* ------------------------------------------------------------------ *
+ *  Read aloud (books)
+ * ------------------------------------------------------------------ */
+
+els.readBtn.addEventListener("click", async () => {
+  if (!state.epub) return;
+  if (!state.reader) {
+    const { createReader } = await import("./read.js");
+    if (!state.epub) return;
+    state.reader = createReader({
+      pages: state.epub,
+      notify: ({ playing, rate }) => {
+        els.readBtn.setAttribute("aria-pressed", String(playing));
+        els.rateBtn.hidden = !playing;
+        els.rateBtn.textContent = `${rate}×`;
+      },
+      problem: (msg) => toast(msg),
+    });
+  }
+  buzz("tick");
+  state.reader.toggle();
+});
+els.rateBtn.addEventListener("click", () => state.reader && state.reader.faster());

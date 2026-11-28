@@ -120,6 +120,13 @@ export function createPages({ host, fill, start = 0, onPage, onTap }) {
 
   return {
     index: () => cur,
+    blocks: () => [...flow.querySelectorAll("p, h2, h3")],
+    // the page a block starts on
+    pageOf(el) {
+      const r = el.getClientRects()[0];
+      if (!r) return cur;
+      return Math.max(0, Math.min(n - 1, Math.floor((r.left - flow.getBoundingClientRect().left + 2) / W)));
+    },
     count: () => n,
     fraction: () => (n > 1 ? cur / (n - 1) : 0),
     goto: (i, smooth) => go(i, smooth),
