@@ -81,7 +81,7 @@ if (!manifest.includes("android:mimeType=\"application/pdf\"")) {
   // Android only reads path patterns when a host is given, and `.*` stops at dots, so there
   // is one pattern per number of dots in the name.
   const pattern = (ext, dots) => ".*" + "\\\\..*".repeat(dots) + "\\\\." + ext;
-  const patterns = ["pdf", "docx", "pptx", "ppsx", "txt"]
+  const patterns = ["pdf", "docx", "pptx", "ppsx", "txt", "boox"]
     .flatMap((ext) => [0, 1, 2, 3].map((n) => `                <data android:pathPattern="${pattern(ext, n)}" />`))
     .join("\n");
   const byName = `

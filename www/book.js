@@ -152,6 +152,25 @@ export function createBook({ host, count, draw, release, onPage, onTap }) {
     place();
   }
 
+  // one plain slide: our own ease-out, with the snapping switched off so nothing pulls the page back afterwards
+  let gl = 0;
+  function glide(to, ms = 260) {
+    cancelAnimationFrame(gl);
+    const from = host.scrollLeft, t0 = performance.now();
+    host.style.scrollSnapType = "none";
+    const step = (now) => {
+      const k = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - k, 3);
+      host.scrollLeft = from + (to - from) * e;
+      if (k < 1 && !dead) gl = requestAnimationFrame(step);
+      else {
+        host.scrollLeft = to;
+        host.style.scrollSnapType = "";
+        host.scrollLeft = to;
+      }
+    };
+    gl = requestAnimationFrame(step);
+  }
+
   /* ----- touches: pinch, pan while zoomed, double-tap, single tap, short swipe ----- */
   let g = null; // the gesture in progress
   let lastTap = 0;
@@ -161,6 +180,7 @@ export function createBook({ host, count, draw, release, onPage, onTap }) {
 
   const onStart =
     (e) => {
+      if (gl) { cancelAnimationFrame(gl); gl = 0; host.style.scrollSnapType = ""; }
       if (e.touches.length === 2) {
         const [cx, cy] = mid(e.touches);
         g = { kind: "pinch", d: dist(e.touches), from: { ...zm }, cx, cy, moved: true };
@@ -220,7 +240,7 @@ export function createBook({ host, count, draw, release, onPage, onTap }) {
       const gone = host.scrollLeft / width() - k.i; // how far the page has already been dragged
       if ((far || quick) && Math.abs(gone) < 0.5) {
         const to = Math.max(0, Math.min(count - 1, k.i + (dx < 0 ? 1 : -1)));
-        host.scrollTo({ left: to * width(), behavior: "smooth" });
+        glide(to * width());
       }
     };
   const onCancel = () => (g = null);
@@ -268,11 +288,13 @@ export function createBook({ host, count, draw, release, onPage, onTap }) {
     index: () => Math.max(0, cur),
     goto(i, smooth) {
       i = Math.max(0, Math.min(count - 1, i));
-      host.scrollTo({ left: i * width(), behavior: smooth ? "smooth" : "instant" });
+      if (smooth) glide(i * width());
+      else host.scrollTo({ left: i * width(), behavior: "instant" });
       if (!smooth) update();
     },
     destroy() {
       dead = true;
+      cancelAnimationFrame(gl);
       clearTimeout(idle);
       clearTimeout(tapTimer);
       clearTimeout(sharpen);

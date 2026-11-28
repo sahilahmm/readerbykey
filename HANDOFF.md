@@ -104,3 +104,6 @@ Stutter fix (from a screen recording: 90-240 ms freezes right after a swipe). Ca
 
 ## 1.9.1.7
 Stutter round 2: 3D tilt removed (no per-scroll-frame style writes), `.bp` has `contain: strict`, no perspective/will-change; `onPage` (haptic tick, pill, save) now fires from `settle()` after the swipe stops; window of loaded pages is +-2 (dropped beyond 3).
+
+## 1.9.1.8
+Bounce fix: `glide()` in book.js (own ease-out, snapping off during it, touch cancels it). `.boox`: best-effort `unboox()` in app.js (zip -> largest PDF, else image pages sorted -> makePdf); `zip.names()` added in docs.js; intent filter + file input accept `.boox`. Real format still unverified; ask for a sample if it fails.

@@ -29,7 +29,7 @@ const PDF_OPTIONS = {
 };
 
 const MAX_OPEN = 250 * 1024 * 1024; // refuse anything bigger than this, it would not fit in memory
-const DOC_EXT = /\.(pdf|docx|pptx|ppsx|txt)$/i;
+const DOC_EXT = /\.(pdf|docx|pptx|ppsx|txt|boox)$/i;
 const EXT = { pdf: ".pdf", docx: ".docx", pptx: ".pptx", txt: ".txt" };
 const MIME = {
   pdf: "application/pdf",
@@ -971,7 +971,54 @@ if (window.visualViewport) {
  *  Getting a document in: file picker, library, "Open with"
  * ------------------------------------------------------------------ */
 
+// .boox: the format is not published, so this reads what any archive of this kind plainly holds:
+// a PDF, or the page pictures. Read-only; the original file is never changed.
+async function unboox(blob, name) {
+  const fail = () => Object.assign(new Error("boox"), { boox: true });
+  let zip;
+  try {
+    zip = await (await loadDocs()).openZip(blob);
+  } catch {
+    throw fail();
+  }
+  const names = zip.names().filter((n) => !n.endsWith("/"));
+  const big = 200 * 1024 * 1024;
+  const pdfs = names.filter((n) => /\.pdf$/i.test(n)).sort((a, b) => zip.size(b) - zip.size(a));
+  if (pdfs.length) return { blob: new Blob([await zip.get(pdfs[0], big)], { type: "application/pdf" }), name: name.replace(/\.boox$/i, ".pdf") };
+  const pics = names.filter((n) => /\.(png|jpe?g|webp)$/i.test(n) && !/thumb|cover|icon/i.test(n)).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  if (!pics.length) throw fail();
+  const { toJpeg, makePdf } = await import("./scan.js");
+  const pages = [];
+  for (const n of pics.slice(0, 300)) {
+    const bytes = await zip.get(n, big);
+    const bmp = await createImageBitmap(new Blob([bytes]));
+    const k = Math.min(1, 2200 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement("canvas");
+    c.width = Math.round(bmp.width * k);
+    c.height = Math.round(bmp.height * k);
+    const x = c.getContext("2d");
+    x.fillStyle = "#fff";
+    x.fillRect(0, 0, c.width, c.height);
+    x.drawImage(bmp, 0, 0, c.width, c.height);
+    bmp.close && bmp.close();
+    pages.push({ jpeg: await toJpeg(c), w: c.width, h: c.height });
+  }
+  return { blob: makePdf(pages, name), name: name.replace(/\.boox$/i, ".pdf") };
+}
+
 async function openBlob(blob, name, id) {
+  if (/\.boox$/i.test(name)) {
+    try {
+      busy("Opening…");
+      const r = await unboox(blob, name);
+      blob = r.blob;
+      name = r.name;
+    } catch (e) {
+      els.loading.hidden = true;
+      toast(e && e.boox ? "Couldn't read that .boox file. Send me a sample so I can add it." : "Couldn't open that file.");
+      return;
+    }
+  }
   if (blob.size > MAX_OPEN) {
     els.loading.hidden = true;
     toast("That file is too large for Reader.");

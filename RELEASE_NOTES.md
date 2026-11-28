@@ -1,3 +1,8 @@
+## 1.9.1.8
+- No more bounce after a page lands: swipes now finish with one smooth slide that stops exactly on the page.
+- Opens `.boox` files, read-only. The format is not published, so Reader opens it as an archive and shows the PDF or the page pictures inside; if there is neither it says so.
+- `.boox` files can be opened from other apps with "Open with Reader".
+
 ## 1.9.1.7
 - Page turning is now a plain slide to the left or right: the page just moves with your finger, with no tilt effect.
 - Nothing is restyled or redrawn while you swipe. The page counter, the tick and saving your place all happen after the swipe lands.

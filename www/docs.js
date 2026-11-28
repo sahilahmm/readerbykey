@@ -81,6 +81,7 @@ export async function openZip(blob) {
   }
 
   return {
+    names: () => [...entries.keys()],
     has: (name) => entries.has(name),
     size: (name) => (entries.has(name) ? entries.get(name).usize : 0),
     async get(name, max = MAX_XML) {
