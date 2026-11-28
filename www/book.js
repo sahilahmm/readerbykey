@@ -32,7 +32,7 @@ export function createBook({ host, count, draw, release, onPage, onTap }) {
     const tok = ++s.token;
     try {
       const n = await draw(i, host.clientWidth, host.clientHeight, z);
-      if (dead || tok !== s.token || Math.abs(i - cur) > 2) return release(n);
+      if (dead || tok !== s.token || Math.abs(i - cur) > 3) return release(n);
       const old = s.node;
       s.el.replaceChildren(n);
       s.node = n;
@@ -56,32 +56,27 @@ export function createBook({ host, count, draw, release, onPage, onTap }) {
       s.sharp = 1;
     }
   }
-  // a little depth: the page leaving swings away from its edge, the page arriving swings in
-  function tilt() {
-    const x = host.scrollLeft, w = width();
-    for (let i = Math.max(0, cur - 1); i <= Math.min(count - 1, cur + 1); i++) {
-      const n = slots[i].node;
-      if (!n || (i === cur && zm.z > 1)) continue;
-      const t = Math.max(-1, Math.min(1, (i * w - x) / w)); // -1 gone left, 0 centred, 1 waiting right
-      const a = Math.abs(t);
-      n.style.transformOrigin = t < 0 ? "100% 50%" : "0% 50%";
-      n.style.transform = a < 0.001 ? "" : `rotateY(${t * -28}deg) scale(${1 - a * 0.1})`;
-    }
-  }
+  const tilt = () => {}; // plain slide: the page just moves with the finger, nothing is restyled while scrolling
   // fill the page being looked at first, then one neighbour at a time, each in its own quiet moment
   let filling = false;
+  let shown = -1;
   const quiet = () => new Promise((r) => setTimeout(() => requestAnimationFrame(r), 120));
   async function settle() {
     if (dead || filling) return;
     if (performance.now() - moving < 90) return void (idle = setTimeout(settle, 100));
+    if (cur >= 0 && cur !== shown) {
+      shown = cur;
+      onPage(cur, announced);
+      announced = true;
+    }
     filling = true;
     try {
-      for (const i of [cur, cur + 1, cur - 1].filter((i) => i >= 0 && i < count)) {
+      for (const i of [cur, cur + 1, cur - 1, cur + 2, cur - 2].filter((i) => i >= 0 && i < count)) {
         if (dead || performance.now() - moving < 90) break; // a new swipe began: leave the rest for later
         await fill(i);
         await quiet();
       }
-      for (let i = 0; i < count; i++) if (Math.abs(i - cur) > 2 && slots[i].node) drop(i);
+      for (let i = 0; i < count; i++) if (Math.abs(i - cur) > 3 && slots[i].node) drop(i);
     } finally {
       filling = false;
     }
@@ -92,8 +87,6 @@ export function createBook({ host, count, draw, release, onPage, onTap }) {
     if (idx !== cur) {
       if (zm.z > 1) resetZoom(false);
       cur = idx;
-      onPage(idx, announced);
-      announced = true;
     }
     tilt();
     clearTimeout(idle);

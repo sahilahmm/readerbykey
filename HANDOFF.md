@@ -101,3 +101,6 @@ Settings menu (`#setBtn`, `#menu`: Vibration `reader.haptics`, Dark mode). Pill:
 
 ## 1.9.1.6
 Stutter fix (from a screen recording: 90-240 ms freezes right after a swipe). Cause: `book.js settle()` drew up to 5 pages at once with oversized canvases (DPR 2.5, 14 MP cap). Now `settle()` fills current, +1, -1 serially with a quiet gap and stops if a new swipe starts; `bookDraw` caps canvases at 3.6 MP (9 MP when zoomed), DPR max 2. Test: `t52.py` style long-task count under 4x CPU throttle went from 4 long tasks to 0.
+
+## 1.9.1.7
+Stutter round 2: 3D tilt removed (no per-scroll-frame style writes), `.bp` has `contain: strict`, no perspective/will-change; `onPage` (haptic tick, pill, save) now fires from `settle()` after the swipe stops; window of loaded pages is +-2 (dropped beyond 3).

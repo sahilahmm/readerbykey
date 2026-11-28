@@ -1,3 +1,8 @@
+## 1.9.1.7
+- Page turning is now a plain slide to the left or right: the page just moves with your finger, with no tilt effect.
+- Nothing is restyled or redrawn while you swipe. The page counter, the tick and saving your place all happen after the swipe lands.
+- Two pages on each side stay loaded, so turning to a nearby page shows it at once.
+
 ## 1.9.1.6
 - Fixed the stutter when a swipe finishes: pages are now drawn one at a time in quiet moments, only the next and previous page are prepared, and a new swipe cancels pending drawing.
 - Book pages are drawn at screen size instead of oversized, so they reach the screen without a stall (zooming still re-draws sharper).
