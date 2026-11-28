@@ -107,3 +107,6 @@ Stutter round 2: 3D tilt removed (no per-scroll-frame style writes), `.bp` has `
 
 ## 1.9.1.8
 Bounce fix: `glide()` in book.js (own ease-out, snapping off during it, touch cancels it). `.boox`: best-effort `unboox()` in app.js (zip -> largest PDF, else image pages sorted -> makePdf); `zip.names()` added in docs.js; intent filter + file input accept `.boox`. Real format still unverified; ask for a sample if it fails.
+
+## 1.9.1.9
+Page turn rewritten as the final design: phone scrolling/snap off (`touch-action:none`, overflow hidden); `book.js` drags `scrollLeft` with the finger and on release `glide()`s (ease-out 260 ms) to start page +-1 (turn if >20% width or flick >0.35 px/ms). No bounce, one page per swipe. EPUB: `readEpub()` in docs.js (container.xml > opf spine > xhtml to blocks), kind `epub` ("Book") in app.js. `.boox` removed (user meant epub).

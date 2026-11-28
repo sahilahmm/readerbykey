@@ -1,5 +1,5 @@
-// Book view: every page fills the screen and a swipe turns it, with the phone's own snapping scroll.
-// The finger moves the page, a quick flick carries it on, and it settles on a page every time.
+// Book view: every page fills the screen and a swipe turns it by exactly one page.
+// The finger drags the page; on release one smooth ease slides it to the next page (or back). The phone's own scrolling is off.
 // Pinch (or double-tap) zooms the page that is showing; while zoomed, one finger moves the page around.
 const MAX_ZOOM = 4;
 
@@ -116,10 +116,7 @@ export function createBook({ host, count, draw, release, onPage, onTap }) {
     zm.x = Math.max(-mx, Math.min(mx, zm.x));
     zm.y = Math.max(-my, Math.min(my, zm.y));
   }
-  function freeze(on) {
-    host.style.touchAction = on ? "none" : "";
-    host.style.overflowX = on ? "hidden" : "";
-  }
+  function freeze() {} // the book already handles every touch itself
   function resetZoom(animate) {
     zm.z = 1;
     zm.x = zm.y = 0;
@@ -152,20 +149,18 @@ export function createBook({ host, count, draw, release, onPage, onTap }) {
     place();
   }
 
-  // one plain slide: our own ease-out, with the snapping switched off so nothing pulls the page back afterwards
+  // one plain slide: a single ease-out from where the page is to the page it should rest on
   let gl = 0;
   function glide(to, ms = 260) {
     cancelAnimationFrame(gl);
     const from = host.scrollLeft, t0 = performance.now();
-    host.style.scrollSnapType = "none";
-    const step = (now) => {
-      const k = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - k, 3);
+        const step = (now) => {
+      const k = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - k, 3); // ease out
       host.scrollLeft = from + (to - from) * e;
       if (k < 1 && !dead) gl = requestAnimationFrame(step);
       else {
         host.scrollLeft = to;
-        host.style.scrollSnapType = "";
-        host.scrollLeft = to;
+        gl = 0;
       }
     };
     gl = requestAnimationFrame(step);
@@ -180,14 +175,15 @@ export function createBook({ host, count, draw, release, onPage, onTap }) {
 
   const onStart =
     (e) => {
-      if (gl) { cancelAnimationFrame(gl); gl = 0; host.style.scrollSnapType = ""; }
+      if (gl) { cancelAnimationFrame(gl); gl = 0; }
       if (e.touches.length === 2) {
         const [cx, cy] = mid(e.touches);
+        host.scrollLeft = Math.round(host.scrollLeft / width()) * width();
         g = { kind: "pinch", d: dist(e.touches), from: { ...zm }, cx, cy, moved: true };
         clearTimeout(tapTimer);
       } else if (e.touches.length === 1) {
         const t = e.touches[0];
-        g = { kind: zm.z > 1 ? "pan" : "swipe", x: t.clientX, y: t.clientY, t: Date.now(), from: { ...zm }, i: Math.round(host.scrollLeft / width()), moved: false };
+        g = { kind: zm.z > 1 ? "pan" : "swipe", x: t.clientX, y: t.clientY, t: Date.now(), from: { ...zm }, i: Math.round(host.scrollLeft / width()), left: host.scrollLeft, trail: [[performance.now(), t.clientX]], moved: false };
       } else g = null;
     };
   const onMove =
@@ -210,9 +206,15 @@ export function createBook({ host, count, draw, release, onPage, onTap }) {
         limit();
         place();
         g.moved = true;
-      } else if (g.kind === "swipe") {
+      } else if (g.kind === "swipe" && e.touches.length === 1) {
+        e.preventDefault();
         const t = e.touches[0];
         if (Math.abs(t.clientX - g.x) > 10 || Math.abs(t.clientY - g.y) > 10) g.moved = true;
+        const max = (count - 1) * width();
+        host.scrollLeft = Math.max(0, Math.min(max, g.left - (t.clientX - g.x)));
+        const now = performance.now();
+        g.trail.push([now, t.clientX]);
+        while (g.trail.length > 2 && now - g.trail[0][0] > 120) g.trail.shift();
       }
     };
   const onEnd =
@@ -234,14 +236,16 @@ export function createBook({ host, count, draw, release, onPage, onTap }) {
       }
       // swipe or tap on a page that is not zoomed
       const dx = c.clientX - k.x, dt = Math.max(1, Date.now() - k.t);
-      if (!k.moved && dt < 300) return tap(c, false);
-      // a short or quick swipe still turns the page; the snapping scroll alone only moves on past the halfway mark
-      const far = Math.abs(dx) > width() * 0.12, quick = Math.abs(dx) > 30 && Math.abs(dx) / dt > 0.35;
-      const gone = host.scrollLeft / width() - k.i; // how far the page has already been dragged
-      if ((far || quick) && Math.abs(gone) < 0.5) {
-        const to = Math.max(0, Math.min(count - 1, k.i + (dx < 0 ? 1 : -1)));
-        glide(to * width());
+      if (!k.moved && dt < 300) {
+        host.scrollLeft = k.i * width();
+        return tap(c, false);
       }
+      // one page per swipe: far enough, or quick enough, turns it; otherwise it slides back
+      const tr = k.trail, span = Math.max(1, tr[tr.length - 1][0] - tr[0][0]);
+      const v = (tr[tr.length - 1][1] - tr[0][1]) / span; // px per ms, right is positive
+      const turn = Math.abs(dx) > width() * 0.2 || (Math.abs(v) > 0.35 && Math.abs(dx) > 24);
+      const to = Math.max(0, Math.min(count - 1, k.i + (turn ? (dx < 0 ? 1 : -1) : 0)));
+      glide(to * width());
     };
   const onCancel = () => (g = null);
   host.addEventListener("touchstart", onStart, { passive: true });

@@ -81,7 +81,6 @@ export async function openZip(blob) {
   }
 
   return {
-    names: () => [...entries.keys()],
     has: (name) => entries.has(name),
     size: (name) => (entries.has(name) ? entries.get(name).usize : 0),
     async get(name, max = MAX_XML) {
@@ -643,4 +642,156 @@ export async function readText(blob) {
       return prose ? lines.join(" ").replace(/ {2,}/g, " ") : lines.join("\n");
     })
     .filter((p) => p.trim());
+}
+
+/* ---------- Books (.epub) ---------- */
+
+const BLOCKS = new Set(["p", "div", "section", "article", "blockquote", "ul", "ol", "li", "pre", "table", "thead", "tbody", "tr", "td", "th", "figure", "figcaption", "aside", "header", "footer", "main", "body", "dl", "dt", "dd", "h1", "h2", "h3", "h4", "h5", "h6"]);
+const SKIP = new Set(["script", "style", "head", "nav", "svg", "audio", "video", "iframe", "object"]);
+const dirOf = (p) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/") + 1) : "");
+function joinPath(base, rel) {
+  const out = [];
+  for (const part of (base + rel).split("/")) {
+    if (part === "..") out.pop();
+    else if (part && part !== ".") out.push(part);
+  }
+  return out.join("/");
+}
+const unesc = (s) => {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+};
+function parseMarkup(text) {
+  if (/<!ENTITY/i.test(text)) throw unsupported("entities are not allowed");
+  let doc = new DOMParser().parseFromString(text, "application/xhtml+xml");
+  if (doc.getElementsByTagName("parsererror").length) doc = new DOMParser().parseFromString(text, "text/html");
+  return doc;
+}
+
+export async function readEpub(blob) {
+  if (blob.size > MAX_FILE) throw unsupported("file too large");
+  const zip = await openZip(blob);
+  const dec = new TextDecoder();
+  const container = await zip.get("META-INF/container.xml");
+  if (!container) throw unsupported("not a book");
+  const cdoc = parseMarkup(dec.decode(container));
+  const opfPath = (cdoc.querySelector("rootfile") || {}).getAttribute?.("full-path");
+  if (!opfPath || !zip.has(opfPath)) throw unsupported("no package file");
+  const opf = parseMarkup(dec.decode(await zip.get(opfPath)));
+  const base = dirOf(opfPath);
+  const items = new Map();
+  for (const it of opf.getElementsByTagName("item")) items.set(it.getAttribute("id"), { href: it.getAttribute("href") || "", type: it.getAttribute("media-type") || "" });
+  const order = [...opf.getElementsByTagName("itemref")].map((r) => items.get(r.getAttribute("idref"))).filter((i) => i && /html|xml/i.test(i.type));
+
+  const urls = [];
+  const blocks = [];
+  let images = 0;
+  const MIME_IMG = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp" };
+
+  for (const [n, item] of order.slice(0, 600).entries()) {
+    const path = joinPath(base, unesc(item.href.split("#")[0]));
+    const bytes = zip.has(path) ? await zip.get(path, MAX_XML) : null;
+    if (!bytes) continue;
+    const dir = dirOf(path);
+    const doc = parseMarkup(dec.decode(bytes));
+    const body = doc.body || doc.documentElement;
+    const before = blocks.length;
+
+    const inline = (el, st, out) => {
+      for (const c of el.childNodes) {
+        if (c.nodeType === 3) {
+          const t = c.nodeValue.replace(/\s+/g, " ");
+          if (t) out.push({ t, ...st });
+        } else if (c.nodeType === 1) {
+          const tag = c.localName.toLowerCase();
+          if (SKIP.has(tag)) continue;
+          if (tag === "br") out.push({ t: "\n" });
+          else if (tag === "img" || tag === "image") {
+            const src = c.getAttribute("src") || c.getAttribute("href") || c.getAttribute("xlink:href");
+            const p = src && !/^(https?:|data:)/i.test(src) ? joinPath(dir, unesc(src.split("#")[0])) : null;
+            const ext = p && p.split(".").pop().toLowerCase();
+            if (p && MIME_IMG[ext] && zip.has(p) && zip.size(p) < 8 * 1024 * 1024 && images < 400) {
+              images++;
+              out.push({ img: p, alt: c.getAttribute("alt") || "", w: 0 });
+            }
+          } else {
+            const s2 = { ...st };
+            if (tag === "b" || tag === "strong") s2.b = true;
+            if (tag === "i" || tag === "em" || tag === "cite") s2.i = true;
+            if (tag === "u") s2.u = true;
+            if (tag === "sup" || tag === "sub") s2.v = tag;
+            const href = tag === "a" ? c.getAttribute("href") : null;
+            if (href && /^https?:/i.test(href)) s2.href = href;
+            inline(c, s2, out);
+          }
+        }
+      }
+    };
+    const flush = (out, extra) => {
+      while (out.length && out[0].t != null && !out[0].t.trim()) out.shift();
+      while (out.length && out[out.length - 1].t != null && !out[out.length - 1].t.trim()) out.pop();
+      if (out.length) {
+        if (out[0].t != null) out[0].t = out[0].t.replace(/^\s+/, "");
+        blocks.push({ type: "p", runs: [...out], ...extra });
+      }
+      out.length = 0;
+    };
+    const walk = (el, depth) => {
+      if (depth > 40) return;
+      let buf = [];
+      for (const c of el.childNodes) {
+        if (c.nodeType === 3) {
+          const t = c.nodeValue.replace(/\s+/g, " ");
+          if (t.trim()) buf.push({ t });
+          continue;
+        }
+        if (c.nodeType !== 1) continue;
+        const tag = c.localName.toLowerCase();
+        if (SKIP.has(tag)) continue;
+        if (!BLOCKS.has(tag)) {
+          inline({ childNodes: [c] }, {}, buf);
+          continue;
+        }
+        flush(buf);
+        const hasBlocks = [...c.querySelectorAll("*")].some((x) => BLOCKS.has(x.localName.toLowerCase()) && !/^h[1-6]$/.test(c.localName.toLowerCase()));
+        if (/^h[1-6]$/.test(tag)) {
+          const out = [];
+          inline(c, {}, out);
+          if (out.some((r) => r.img || (r.t && r.t.trim()))) {
+            flush(out);
+            const last = blocks.pop();
+            blocks.push({ type: "h", level: tag === "h1" || tag === "h2" ? 1 : 2, runs: last.runs });
+          }
+        } else if (hasBlocks) walk(c, depth + 1);
+        else {
+          const out = [];
+          if (tag === "li") out.push({ t: "• " });
+          inline(c, tag === "pre" ? {} : {}, out);
+          flush(out);
+        }
+      }
+      flush(buf);
+    };
+    walk(body, 0);
+    if (n > 0 && blocks.length > before) blocks.splice(before, 0, { type: "hr" });
+  }
+
+  // pictures last: only those the page runs actually point at
+  const cache = new Map();
+  for (const b of blocks) {
+    if (!b.runs) continue;
+    for (const r of b.runs) {
+      if (!r.img) continue;
+      if (!cache.has(r.img)) {
+        const u = URL.createObjectURL(new Blob([await zip.get(r.img, 8 * 1024 * 1024)], { type: MIME_IMG[r.img.split(".").pop().toLowerCase()] }));
+        urls.push(u);
+        cache.set(r.img, u);
+      }
+      r.img = cache.get(r.img);
+    }
+  }
+  return { blocks, urls };
 }

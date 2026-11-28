@@ -73,15 +73,16 @@ if (!manifest.includes("android:mimeType=\"application/pdf\"")) {
                 <data android:mimeType="${DOCX}" />
                 <data android:mimeType="${PPTX}" />
                 <data android:mimeType="${PPSX}" />
+                <data android:mimeType="application/epub+zip" />
                 <data android:mimeType="text/plain" />
             </intent-filter>
 `;
 
-  // Filter B: the app sends a generic type (or none), but the file name ends in .pdf/.docx/.pptx/.ppsx/.txt.
+  // Filter B: the app sends a generic type (or none), but the file name ends in .pdf/.docx/.pptx/.ppsx/.txt/.epub.
   // Android only reads path patterns when a host is given, and `.*` stops at dots, so there
   // is one pattern per number of dots in the name.
   const pattern = (ext, dots) => ".*" + "\\\\..*".repeat(dots) + "\\\\." + ext;
-  const patterns = ["pdf", "docx", "pptx", "ppsx", "txt", "boox"]
+  const patterns = ["pdf", "docx", "pptx", "ppsx", "txt", "epub"]
     .flatMap((ext) => [0, 1, 2, 3].map((n) => `                <data android:pathPattern="${pattern(ext, n)}" />`))
     .join("\n");
   const byName = `

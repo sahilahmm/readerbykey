@@ -1,3 +1,8 @@
+## 1.9.1.9
+- One swipe now turns exactly one page. Page turning is a single smooth ease: your finger drags the page, and on release it slides to the next page or back.
+- Opens EPUB books (chapters, headings, bold and italic, lists, pictures, Bangla). Use "Open with Reader" on an .epub or pick one from Open.
+- Removed the experimental .boox opening from 1.9.1.8.
+
 ## 1.9.1.8
 - No more bounce after a page lands: swipes now finish with one smooth slide that stops exactly on the page.
 - Opens `.boox` files, read-only. The format is not published, so Reader opens it as an archive and shows the PDF or the page pictures inside; if there is neither it says so.
