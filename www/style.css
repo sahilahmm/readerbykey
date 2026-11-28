@@ -663,3 +663,12 @@ button { font: inherit; color: inherit; }
 .rbook[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
 .chrome-hidden .rbook, .as-text .rbook { opacity: 0; pointer-events: none; transform: scale(0.9); }
 .bp .page { transition: none; }
+
+/* ---------- books (.epub): real pages ---------- */
+.epubdoc .textview { overflow: hidden; padding: calc(var(--top) + 14px) 0 calc(var(--bottom) + 130px); touch-action: none; }
+.epubdoc.as-text .pill { display: block; }
+.ep-flow { box-sizing: border-box; column-fill: auto; will-change: transform; }
+.ep-flow p { max-width: none; margin: 0 0 0.75em; text-align: justify; hyphens: auto; orphans: 2; widows: 2; }
+.ep-flow h2, .ep-flow h3 { max-width: none; margin: 0.6em 0 0.5em; break-after: avoid; break-inside: avoid; }
+.ep-flow img { max-width: 100%; max-height: calc(var(--ph, 600px) * 0.62); width: auto; object-fit: contain; break-inside: avoid; }
+.ep-flow .pg { break-after: column; height: 0; margin: 0; opacity: 0; }

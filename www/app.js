@@ -67,7 +67,8 @@ const state = {
   undo: null, // what the pill's Undo button will do
   // reader
   open: false, // a document (of any kind) is open
-  kind: null, // "pdf" | "docx" | "txt"
+  kind: null, // "pdf" | "docx" | "pptx" | "txt" | "epub"
+  epub: null, // the page-by-page book reader while a book is open
   pdf: null,
   id: null,
   meta: null,
@@ -1216,6 +1217,7 @@ async function showTextDoc(gen, kind, id, name, blob, meta) {
   const x = await loadDocs();
   let paras = null;
   let doc = null;
+  let book = null;
   if (kind === "docx") doc = await x.readDocx(blob);
   else if (kind === "epub") doc = await x.readEpub(blob);
   else paras = await x.readText(blob);
@@ -1232,7 +1234,10 @@ async function showTextDoc(gen, kind, id, name, blob, meta) {
   if (doc) {
     state.textPages = null;
     els.textView.replaceChildren();
-    if (doc.blocks.length) x.renderBlocks(doc.blocks, els.textView);
+    if (kind === "epub" && doc.blocks.length) {
+      book = doc;
+      els.reader.classList.add("epubdoc");
+    } else if (doc.blocks.length) x.renderBlocks(doc.blocks, els.textView);
     else {
       const p = document.createElement("p");
       p.textContent = kind === "epub" ? "This book has no text." : "This Word document has no text.";
@@ -1250,6 +1255,28 @@ async function showTextDoc(gen, kind, id, name, blob, meta) {
   applyNight(state.night);
   setTextView(true);
 
+  if (book) {
+    const { createPages } = await import("./epages.js");
+    if (gen !== state.gen) return false;
+    els.textView.style.setProperty("--tz", state.tz);
+    state.epubSeen = false;
+    state.epub = createPages({
+      host: els.textView,
+      fill: (flow) => x.renderBlocks(book.blocks, flow),
+      start: clamp(meta.pct || 0, 0, 1),
+      onPage: (i, n) => {
+        els.pill.dataset.ready = "1";
+        els.pill.textContent = `${i + 1} / ${n}`;
+        if (state.epubSeen) buzz("tick");
+        state.epubSeen = true;
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(() => saveProgress(false), 500);
+      },
+      onTap: tapToggleChrome,
+    });
+    setChrome(true);
+    return true;
+  }
   const max = els.textView.scrollHeight - els.textView.clientHeight;
   els.textView.scrollTop = max > 0 ? clamp(meta.pct || 0, 0, 1) * max : 0;
   setChrome(true);
@@ -1271,7 +1298,11 @@ function closeDocument() {
   state.textPages = null;
   if (state.docUrls) state.docUrls.forEach((u) => URL.revokeObjectURL(u));
   state.docUrls = null;
-  els.reader.classList.remove("textdoc");
+  els.reader.classList.remove("textdoc", "epubdoc");
+  if (state.epub) {
+    state.epub.destroy();
+    state.epub = null;
+  }
   setTextView(false);
   els.textView.replaceChildren();
   leaveBook();
@@ -1543,6 +1574,12 @@ els.textView.addEventListener(
 
 function saveProgress(now) {
   if (!state.open || !state.meta) return;
+  if (state.epub) {
+    Object.assign(state.meta, { pct: state.epub.fraction(), openedAt: Date.now() });
+    const q = putMeta({ ...state.meta });
+    if (!now) q.catch(() => {});
+    return;
+  }
   if (paged(state.kind)) {
     if (state.bookView) {
       const i = state.bookView.index();
@@ -1613,6 +1650,7 @@ function zoomBy(factor) {
     state.tz = clamp(state.tz * factor, 0.8, 2.4);
     els.textView.style.setProperty("--tz", state.tz);
     store("reader.tz", String(state.tz));
+    if (state.epub) state.epub.refit();
     return;
   }
   zoomAt(state.zoom * factor, els.scroller.clientWidth / 2, els.scroller.clientHeight / 2);
@@ -1705,6 +1743,7 @@ watchDoubleTap(els.scroller, (x, y) => {
   zoomAt(state.zoom > 1.08 ? 1 : Math.min(MAX_ZOOM, 2.2), x - r.left, y - r.top);
 });
 watchDoubleTap(els.textView, () => {
+  if (state.epub) return;
   state.tz = state.tz > 1.2 ? 1 : 1.6;
   els.textView.style.setProperty("--tz", state.tz);
   store("reader.tz", String(state.tz));
@@ -1974,9 +2013,10 @@ els.textBtn.addEventListener("click", async () => {
 
 els.pill.addEventListener("click", (e) => {
   e.stopPropagation();
-  els.jumpInput.max = String(state.pages.length);
+  const total = state.epub ? state.epub.count() : state.pages.length;
+  els.jumpInput.max = String(total);
   els.jumpInput.value = "";
-  els.jumpInput.placeholder = `1 – ${state.pages.length}`;
+  els.jumpInput.placeholder = `1 – ${total}`;
   els.sheet.hidden = false;
   setTimeout(() => els.jumpInput.focus(), 50);
 });
@@ -1985,8 +2025,9 @@ els.sheet.addEventListener("click", (e) => {
 });
 els.jumpForm.addEventListener("submit", (e) => {
   e.preventDefault();
-  const n = clamp(parseInt(els.jumpInput.value, 10) || 1, 1, state.pages.length);
+  const n = clamp(parseInt(els.jumpInput.value, 10) || 1, 1, state.epub ? state.epub.count() : state.pages.length);
   closeSheet();
+  if (state.epub) return state.epub.goto(n - 1, true);
   if (state.bookView) return state.bookView.goto(n - 1, true);
   scrollToAnchor({ idx: n - 1, frac: 0 }, 12);
   updateVisible();

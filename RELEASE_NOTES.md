@@ -1,6 +1,6 @@
 ## 1.9.1.9
 - One swipe now turns exactly one page. Page turning is a single smooth ease: your finger drags the page, and on release it slides to the next page or back.
-- Opens EPUB books (chapters, headings, bold and italic, lists, pictures, Bangla). Use "Open with Reader" on an .epub or pick one from Open.
+- Opens EPUB books as real pages (chapters, headings, bold and italic, lists, pictures, Bangla). Swipe to turn a page, or tap the left or right edge. The − and + buttons change the text size and the pages flow again. It remembers your page. Use "Open with Reader" on an .epub or pick one from Open.
 - Removed the experimental .boox opening from 1.9.1.8.
 
 ## 1.9.1.8

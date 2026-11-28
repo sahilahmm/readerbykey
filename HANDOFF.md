@@ -110,3 +110,4 @@ Bounce fix: `glide()` in book.js (own ease-out, snapping off during it, touch ca
 
 ## 1.9.1.9
 Page turn rewritten as the final design: phone scrolling/snap off (`touch-action:none`, overflow hidden); `book.js` drags `scrollLeft` with the finger and on release `glide()`s (ease-out 260 ms) to start page +-1 (turn if >20% width or flick >0.35 px/ms). No bounce, one page per swipe. EPUB: `readEpub()` in docs.js (container.xml > opf spine > xhtml to blocks), kind `epub` ("Book") in app.js. `.boox` removed (user meant epub).
+EPUB pages (added to 1.9.1.9): `www/epages.js` `createPages()` flows the book into CSS columns (width = screen, one column per page), drag + one-page ease like book mode, edge taps turn, centre tap toggles toolbar; text size via `--tz` then `refit()`; progress saved as `pct` = page fraction; pill shows page n / N; class `epubdoc` on the reader.
